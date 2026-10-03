@@ -187,10 +187,10 @@ footer{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--fg-2);
       <p class="caption" id="case-caption"></p>
     </div>
     <div class="split-32" style="margin-top:18px">
-      <div class="card"><div class="scroll-x"><table id="bond-table" class="compact"><caption>The 10 bonds in this case</caption><thead><tr>
+      <div class="card"><div class="scroll-x" tabindex="0" role="region" aria-label="The 10 bonds in this case"><table id="bond-table" class="compact"><caption>The 10 bonds in this case</caption><thead><tr>
         <th scope="col">Bond</th><th scope="col">Normal z</th><th scope="col">Correlated x</th><th scope="col">u = N(x)</th>
         <th scope="col">Default time (yrs)</th><th scope="col">Default quarter</th><th scope="col">Cash received</th></tr></thead><tbody></tbody></table></div></div>
-      <div class="card"><div class="scroll"><table id="cf-table" class="compact"><caption class="sr">Quarterly cash flows of this case</caption><thead><tr>
+      <div class="card"><div class="scroll" tabindex="0" role="region" aria-label="Quarterly cash flows of this case"><table id="cf-table" class="compact"><caption class="sr">Quarterly cash flows of this case</caption><thead><tr>
         <th scope="col">Quarter</th><th scope="col">In default</th><th scope="col">Pool</th><th scope="col">Class A</th>
         <th scope="col">Class B</th><th scope="col">Equity</th></tr></thead><tbody></tbody></table></div></div>
     </div>
@@ -204,12 +204,12 @@ footer{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--fg-2);
       <div class="card"><div class="chart-wrap short"><canvas id="chart-pool" role="img" aria-label="Histogram of total five-year cash from the collateral pool"></canvas></div><p class="caption" id="pool-caption"></p></div>
       <div class="card"><div class="chart-wrap short"><canvas id="chart-equity" role="img" aria-label="Histogram of total five-year cash to the equity"></canvas></div><p class="caption" id="equity-caption"></p></div>
     </div>
-    <div class="card" style="margin-top:18px"><div class="scroll-x"><table id="summary-table"><caption>Total cash received over the 5 years ($ MM)</caption><thead><tr>
-      <th scope="col"></th><th scope="col">Promised</th><th scope="col">Mean</th><th scope="col">Std dev</th><th scope="col">5th pct</th>
+    <div class="card" style="margin-top:18px"><div class="scroll-x" tabindex="0" role="region" aria-label="Total cash received over the 5 years"><table id="summary-table"><caption>Total cash received over the 5 years ($ MM)</caption><thead><tr>
+      <th scope="col">Series</th><th scope="col">Promised</th><th scope="col">Mean</th><th scope="col">Std dev</th><th scope="col">5th pct</th>
       <th scope="col">Median</th><th scope="col">Worst case</th><th scope="col">Mean / promised</th><th scope="col">Cases below promised</th></tr></thead><tbody></tbody></table></div></div>
     <div class="split-23" style="margin-top:18px">
       <div class="card"><div class="chart-wrap short"><canvas id="chart-defaults" role="img" aria-label="Distribution of the number of defaults: simulated, exact under the model, and if independent"></canvas></div><p class="caption" id="defaults-caption"></p></div>
-      <div class="card"><div class="scroll-x"><table id="defaults-table"><caption>Number of bonds defaulting within 5 years</caption><thead><tr>
+      <div class="card"><div class="scroll-x" tabindex="0" role="region" aria-label="Number of bonds defaulting within 5 years"><table id="defaults-table"><caption>Number of bonds defaulting within 5 years</caption><thead><tr>
         <th scope="col">Defaults</th><th scope="col">Cases</th><th scope="col">Simulated</th><th scope="col">Exact (model)</th>
         <th scope="col">If independent</th><th scope="col">Avg equity cash</th></tr></thead><tbody></tbody></table></div></div>
     </div>
@@ -230,7 +230,7 @@ footer{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--fg-2);
       <div class="card"><div class="chart-wrap short"><canvas id="chart-s-rho" role="img" aria-label="Equity cash against the default correlation"></canvas></div></div>
     </div>
     <div class="card" style="margin-top:18px">
-      <div class="scroll-x"><table id="sens-table"><caption>Sensitivity tables: equity cash in $ MM, and the share of cases in which a class is short in any quarter</caption><thead><tr>
+      <div class="scroll-x" tabindex="0" role="region" aria-label="Sensitivity tables"><table id="sens-table"><caption>Sensitivity tables: equity cash in $ MM, and the share of cases in which a class is short in any quarter</caption><thead><tr>
         <th scope="col">Input</th><th scope="col">Value</th><th scope="col">Avg defaults</th><th scope="col">No default</th><th scope="col">Equity mean</th>
         <th scope="col">Equity std</th><th scope="col">Equity 5th pct</th><th scope="col">Equity min</th><th scope="col">A short</th><th scope="col">B short</th></tr></thead><tbody></tbody></table></div>
       <p class="caption" id="sens-caption"></p>

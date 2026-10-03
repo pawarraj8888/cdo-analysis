@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -285,7 +286,9 @@ def results_pages(results: dict, figures: Path) -> list:
         f"Figure 3. Quarterly coupon cash flows in quarters 1 to {len(q) - 1}. The mean pool cash flow falls from "
         f"${q[0]['pool mean']:.2f} MM to ${q[-2]['pool mean']:.2f} MM as defaults build up, and equity receives the "
         f"pool cash less the ${results['checks']['classes_need_per_quarter']:.2f} MM due to the classes. Even if every "
-        "bond defaulted in quarter 1 the pool would pay three times what the classes need. At maturity (not shown) "
+        "bond defaulted in quarter 1 the pool would pay "
+        f"{results['checks']['floor_per_quarter'] / results['checks']['classes_need_per_quarter']:.0f} times what the "
+        "classes need. At maturity (not shown) "
         f"the pool pays ${q[-1]['pool mean']:.1f} MM on average out of ${q[-1]['pool promised']:.1f} MM, of which "
         f"equity receives ${q[-1]['equity mean']:.1f} MM.", CAPTION))
     return story
@@ -327,14 +330,19 @@ def sensitivity_page(results: dict, figures: Path) -> list:
 def class_risk_page(results: dict) -> list:
     stress, c, deal = results["stress"], results["checks"], results["deal"]
     by_pd, by_rho = keyed(stress["pd"], "pd"), keyed(stress["rho"], "rho")
+    promised = results["promised"]
+    # with nothing recovered, how many bonds must survive to pay each class at maturity
+    survivors_a = math.ceil(promised["class_a"][-1] / promised["bond"][-1] - 1e-12)
+    survivors_b = math.ceil((promised["class_a"][-1] + promised["class_b"][-1]) / promised["bond"][-1] - 1e-12)
     story = [
         PageBreak(),
         Paragraph("5. When do the classes become risky?", H2),
         Paragraph(
             "With the base LGD no combination of default probability and correlation can touch Class A or Class B, "
             f"so for the runs below we set the LGD to {pct(stress['lgd'], 0)} (nothing recovered on a defaulted bond). Each "
-            f"surviving bond pays ${results['promised']['bond'][-1]:.2f} MM at maturity, so Class B needs at least 3 "
-            "of the 10 bonds to survive to be paid in full and Class A needs at least 2. At the base default "
+            f"surviving bond pays ${promised['bond'][-1]:.2f} MM at maturity, so Class B needs at least {survivors_b} "
+            f"of the {deal['n_bonds']} bonds to survive to be paid in full and Class A needs at least {survivors_a}. "
+            "At the base default "
             f"probability and correlation this fails for Class B in only {pct(by_pd[0.04]['P(B shortfall)'])} of "
             f"cases, but it rises quickly with either input: to {pct(by_pd[0.12]['P(B shortfall)'])} at a 12% default "
             f"probability and to {pct(by_rho[0.8]['P(B shortfall)'])} at a correlation of 0.8. With independent "
@@ -364,8 +372,8 @@ def class_risk_page(results: dict) -> list:
     story.append(Paragraph(
         "The size of Class B is the other lever. In the worst case the pool pays "
         f"${c['floor_at_maturity']:.1f} MM at maturity and Class A takes ${results['promised']['class_a'][-1]:.1f} MM, "
-        f"so Class B stays fully covered by recoveries alone up to a notional of about ${safe_b:.1f} MM, twice its "
-        f"proposed size. At ${mm(30, 0)} MM it is short in {pct(by_size[30.0]['P(B shortfall)'])} of cases and at "
+        f"so Class B stays fully covered by recoveries alone up to a notional of about ${safe_b:.1f} MM, "
+        f"{safe_b / deal['b_notional']:.1f} times its proposed size. At ${mm(30, 0)} MM it is short in {pct(by_size[30.0]['P(B shortfall)'])} of cases and at "
         f"${mm(60, 0)} MM in {pct(by_size[60.0]['P(B shortfall)'])}; each extra dollar of Class B comes out of the "
         "equity cash one for one.", BODY))
     rows = [["Class B notional", "Equity mean", "Equity 5th pct", "Equity min", "P(A shortfall)", "P(B shortfall)",
@@ -388,8 +396,8 @@ def client_points(results: dict, safe_b: float) -> list:
     equity = next(row for row in results["summary"] if row["series"] == "equity")
     points = [
         "Class A and Class B are covered by the recovery value of the collateral alone. As long as recoveries are at "
-        f"least 30% of promised payments (LGD of {pct(c['safe_lgd']['class_b'], 0)} or less), they are paid in full "
-        "whatever the default experience.",
+        f"least {pct(1 - c['safe_lgd']['class_b'], 0)} of promised payments (LGD of {pct(c['safe_lgd']['class_b'], 0)} "
+        "or less), they are paid in full whatever the default experience.",
         "The bank's retained equity carries all of the default risk. Its expected cash is about "
         f"{pct(equity['mean / promised'], 0)} of the no-default amount, and in 1 case out of 20 it receives "
         f"${mm(equity['5th pct'], 0)} MM or less out of ${equity['promised']:.0f} MM.",

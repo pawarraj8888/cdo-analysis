@@ -274,10 +274,10 @@
   "class_a_shortfall_cases": 0,
   "class_b_shortfall_cases": 0,
   "p_four_or_more_simulated": 0.179,
-  "p_four_or_more_exact": 0.16259357168949848,
+  "p_four_or_more_exact": 0.16259357168950467,
   "p_four_or_more_independent": 0.09538119945950997,
-  "stress_exact_p_a_shortfall": 0.0012747715771637654,
-  "stress_exact_p_b_shortfall": 0.005043863603317527,
+  "stress_exact_p_a_shortfall": 0.0012747715771638133,
+  "stress_exact_p_b_shortfall": 0.005043863603317719,
   "worst_case": 760,
   "worst_case_defaults": 9
  },

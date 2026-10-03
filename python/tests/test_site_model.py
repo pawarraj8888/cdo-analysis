@@ -17,6 +17,8 @@ from cdo.analysis import expected_pool_cash_flows  # noqa: E402
 
 MODEL_JS = ROOT.parent / "docs" / "model.js"
 STRESSED = {**BASE_DEAL, "pd": 0.12, "lgd": 1.0, "rho": 0.6, "b_notional": 30.0}
+EXTREME = {**BASE_DEAL, "pd": 0.20, "lgd": 0.0, "rho": 0.95, "a_notional": 0.0, "b_notional": 60.0}
+DEALS = [(0, BASE_DEAL), (1, STRESSED), (2, EXTREME)]
 NORMAL_GRID = [x / 8.0 for x in range(-80, 81)]
 
 SCRIPT = """
@@ -38,7 +40,7 @@ def javascript(normals) -> dict:
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
-    payload = json.dumps({"z": normals.tolist(), "deals": [BASE_DEAL, STRESSED], "grid": NORMAL_GRID})
+    payload = json.dumps({"z": normals.tolist(), "deals": [deal for _, deal in DEALS], "grid": NORMAL_GRID})
     done = subprocess.run([node, "-e", SCRIPT, str(MODEL_JS)], input=payload, capture_output=True, text=True, timeout=120)
     assert done.returncode == 0, done.stderr
     return json.loads(done.stdout)
@@ -48,7 +50,7 @@ def test_normal_cdf_matches_scipy(javascript):
     assert np.allclose(javascript["cdf"], norm.cdf(NORMAL_GRID), rtol=0, atol=1e-15)
 
 
-@pytest.mark.parametrize("index, deal", [(0, BASE_DEAL), (1, STRESSED)])
+@pytest.mark.parametrize("index, deal", DEALS)
 def test_cash_flows_match_python_in_every_case(javascript, normals, index, deal):
     run = javascript["runs"][index]
     r = simulate(normals, deal)
@@ -59,7 +61,7 @@ def test_cash_flows_match_python_in_every_case(javascript, normals, index, deal)
     assert np.allclose(run["equity"], r["eq_cf"], rtol=0, atol=1e-9)
 
 
-@pytest.mark.parametrize("index, deal", [(0, BASE_DEAL), (1, STRESSED)])
+@pytest.mark.parametrize("index, deal", DEALS)
 def test_summary_statistics_match_python(javascript, normals, index, deal):
     expected = summary_row(normals, deal)
     summary = javascript["runs"][index]["summary"]
@@ -68,7 +70,7 @@ def test_summary_statistics_match_python(javascript, normals, index, deal):
         assert summary[key] == pytest.approx(value, abs=1e-9), key
 
 
-@pytest.mark.parametrize("index, deal", [(0, BASE_DEAL), (1, STRESSED)])
+@pytest.mark.parametrize("index, deal", DEALS)
 def test_exact_benchmarks_match_python(javascript, index, deal):
     run = javascript["runs"][index]
     p_default = 1 - (1 - deal["pd"]) ** deal["years"]

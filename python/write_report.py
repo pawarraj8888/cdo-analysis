@@ -201,8 +201,9 @@ def sensitivity_notes(results: dict) -> list:
          "whether the classes are at risk. Class B is fully covered as long as the worst case pool at maturity, "
          f"{results['promised']['pool'][-1]:.1f} x (1 - LGD), is at least {c['classes_need_at_maturity']:.1f}, that is "
          f"up to an LGD of {pct(c['safe_lgd']['class_b'])}, and Class A up to {pct(c['safe_lgd']['class_a'])}. In the "
-         f"simulation the first Class B shortfalls appear at LGD 80% ({pct(by_lgd[0.8]['P(B shortfall)'])} of cases) "
-         f"and reach {pct(by_lgd[1.0]['P(B shortfall)'])} at LGD 100%."),
+         f"simulation Class B shortfalls first appear at LGD 80% ({pct(by_lgd[0.8]['P(B shortfall)'])} of cases) "
+         f"and stand at {pct(by_lgd[0.9]['P(B shortfall)'])} at LGD 90% and {pct(by_lgd[1.0]['P(B shortfall)'])} at "
+         "LGD 100%."),
         ("Correlation",
          f"it does not change the average (mean equity stays near ${mm(by_rho[0.2]['equity mean'], 0)} MM, since each "
          "bond's own default probability is unchanged) but it widens the distribution. From a correlation of 0 to "
@@ -345,9 +346,9 @@ def class_risk_page(results: dict) -> list:
             "At the base default "
             f"probability and correlation this fails for Class B in only {pct(by_pd[0.04]['P(B shortfall)'])} of "
             f"cases, but it rises quickly with either input: to {pct(by_pd[0.12]['P(B shortfall)'])} at a 12% default "
-            f"probability and to {pct(by_rho[0.8]['P(B shortfall)'])} at a correlation of 0.8. With independent "
-            f"defaults there are no shortfalls in any of the {results['n_cases']} cases, so for the classes the "
-            "correlation is the input that creates the risk, while for equity it only spreads the outcomes. These "
+            f"probability and to {pct(by_rho[0.8]['P(B shortfall)'])} at a correlation of 0.8. At the base default "
+            f"probability with independent defaults there are no shortfalls in any of the {results['n_cases']} "
+            "cases, so at that default rate the risk to the classes comes from the correlation. These "
             f"are tail events, so {results['n_cases']} cases measure them roughly: the base row rests on "
             f"{round(by_pd[0.04]['P(B shortfall)'] * results['n_cases'])} cases for Class B and "
             f"{round(by_pd[0.04]['P(A shortfall)'] * results['n_cases'])} for Class A, and the exact probabilities "
@@ -374,8 +375,9 @@ def class_risk_page(results: dict) -> list:
         f"${c['floor_at_maturity']:.1f} MM at maturity and Class A takes ${results['promised']['class_a'][-1]:.1f} MM, "
         f"so Class B stays fully covered by recoveries alone up to a notional of about ${safe_b:.1f} MM, "
         f"{safe_b / deal['b_notional']:.1f} times its proposed size. At ${mm(30, 0)} MM it is short in {pct(by_size[30.0]['P(B shortfall)'])} of cases and at "
-        f"${mm(60, 0)} MM in {pct(by_size[60.0]['P(B shortfall)'])}; each extra dollar of Class B comes out of the "
-        "equity cash one for one.", BODY))
+        f"${mm(60, 0)} MM in {pct(by_size[60.0]['P(B shortfall)'])}. Each extra $1 MM of Class B takes about "
+        f"${(by_size[10.0]['equity mean'] - by_size[20.0]['equity mean']) / 10:.2f} MM out of the equity cash (its "
+        "principal plus five years of coupons).", BODY))
     rows = [["Class B notional", "Equity mean", "Equity 5th pct", "Equity min", "P(A shortfall)", "P(B shortfall)",
              "B paid / due"]]
     for r in results["sensitivities"]["b_notional"]:
@@ -385,8 +387,8 @@ def class_risk_page(results: dict) -> list:
                      pct(r["B paid / due"], 2)])
     story += [
         table(rows, [1.35 * inch] + [0.95 * inch] * 6),
-        Paragraph("Table 5. Class B notional varied with all other inputs at base (LGD 60%). Equity figures are total "
-                  "5-year cash in $ MM.", CAPTION),
+        Paragraph(f"Table 5. Class B notional varied with all other inputs at base (LGD {pct(deal['lgd'], 0)}). Equity "
+                  "figures are total 5-year cash in $ MM.", CAPTION),
     ]
     return story + client_points(results, safe_b)
 
@@ -394,6 +396,7 @@ def class_risk_page(results: dict) -> list:
 def client_points(results: dict, safe_b: float) -> list:
     c = results["checks"]
     equity = next(row for row in results["summary"] if row["series"] == "equity")
+    by_rho = keyed(results["sensitivities"]["rho"], "rho")
     points = [
         "Class A and Class B are covered by the recovery value of the collateral alone. As long as recoveries are at "
         f"least {pct(1 - c['safe_lgd']['class_b'], 0)} of promised payments (LGD of {pct(c['safe_lgd']['class_b'], 0)} "
@@ -401,8 +404,10 @@ def client_points(results: dict, safe_b: float) -> list:
         "The bank's retained equity carries all of the default risk. Its expected cash is about "
         f"{pct(equity['mean / promised'], 0)} of the no-default amount, and in 1 case out of 20 it receives "
         f"${mm(equity['5th pct'], 0)} MM or less out of ${equity['promised']:.0f} MM.",
-        "The equity result is most sensitive to the default probability for its average and to the correlation for "
-        "its downside. The LGD assumption is the one to watch for the classes.",
+        "Over the ranges we tested, the default probability moves the equity result the most. Correlation leaves the "
+        f"average alone but lowers the 5th percentile from ${mm(by_rho[0.0]['equity 5th pct'], 0)} MM to "
+        f"${mm(by_rho[0.8]['equity 5th pct'], 0)} MM between 0 and 0.8. The LGD assumption is the one to watch for "
+        "the classes.",
         f"The structure is conservative: Class B could be about ${safe_b:.0f} MM instead of "
         f"${results['deal']['b_notional']:.0f} MM and still be fully covered if every bond defaulted.",
         "These are cash flow results only. What the classes and the equity are worth, given the "
@@ -453,7 +458,16 @@ def appendix(results: dict, figures: Path) -> list:
     return story
 
 
+def check_report_assumptions(results: dict) -> None:
+    """The wording of the report assumes both classes are paid in full at the base inputs. Stop if not."""
+    c = results["checks"]
+    if c["class_a_shortfall_cases"] or c["class_b_shortfall_cases"]:
+        raise SystemExit("The report text assumes Class A and Class B are paid in full in every case at the base "
+                         "inputs, which is not true for these results. Revise write_report.py before using it.")
+
+
 def write_pdf(results: dict, figures: Path, target: Path) -> None:
+    check_report_assumptions(results)
     story = front_matter(results) + results_pages(results, figures) + sensitivity_page(results, figures)
     story += class_risk_page(results) + appendix(results, figures)
     document = SimpleDocTemplate(str(target), pagesize=letter, leftMargin=0.75 * inch, rightMargin=0.75 * inch,

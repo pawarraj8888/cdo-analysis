@@ -36,6 +36,13 @@ def test_default_time_formula_for_a_single_draw():
     assert T[0, 0] == pytest.approx(math.log(0.5) / math.log(0.96))
 
 
+def test_a_higher_normal_means_a_later_default():
+    T = default_times(np.array([[-2.0], [0.0], [2.0]]), 0.04, 0.0)[:, 0]
+    assert T[0] < T[1] < T[2]
+    # by hand: u = N(-2) = 0.02275, so t = ln(1 - 0.02275) / ln(0.96) = 0.564 years
+    assert T[0] == pytest.approx(0.5638, abs=1e-4)
+
+
 def test_each_bond_keeps_its_own_default_probability_under_correlation():
     Z = np.random.default_rng(4).standard_normal((200_000, 10))
     T = default_times(Z, 0.04, 0.2)

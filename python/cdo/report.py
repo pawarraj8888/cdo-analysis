@@ -18,7 +18,7 @@ COLORS = {
     "grid": "#e1e0d9",
     "axis": "#c3c2b7",
     "pool": "#52514e",
-    "benchmark": "#c3c2b7",
+    "benchmark": "#898781",
     "equity": "#2a78d6",
     "class_a": "#eb6834",
     "class_b": "#1baf7a",

@@ -81,18 +81,22 @@ def expected_pool_cash_flows(p: dict) -> np.ndarray:
     return promised * ((1.0 - p["lgd"]) + p["lgd"] * survival)
 
 
-def exact_default_count_distribution(n_bonds: int, p_default: float, rho: float, nodes: int = 96) -> np.ndarray:
+def exact_default_count_distribution(n_bonds: int, p_default: float, rho: float, steps: int = 2000) -> np.ndarray:
     """Exact distribution of the number of defaults under the model, with no random numbers.
 
     Equal pairwise correlation rho is the same as one common factor M shared by all bonds. Given M
     the bonds default independently with probability N((N^-1(p) - sqrt(rho) M) / sqrt(1 - rho)),
-    so the answer is a binomial averaged over M (Gauss-Hermite quadrature).
+    so the answer is a binomial averaged over M. The average uses Simpson's rule on -9 to 9, which
+    stays accurate at high correlation where the conditional probability is close to a step.
     """
     k = np.arange(n_bonds + 1)
     if rho == 0 or p_default in (0.0, 1.0):
         return binom.pmf(k, n_bonds, p_default)
-    m, weights = np.polynomial.hermite_e.hermegauss(nodes)
-    weights = weights / weights.sum()
+    m = np.linspace(-9.0, 9.0, steps + 1)
+    simpson = np.ones(steps + 1)
+    simpson[1:-1:2] = 4.0
+    simpson[2:-1:2] = 2.0
+    weights = simpson * (m[1] - m[0]) / 3.0 * norm.pdf(m)
     conditional = norm.cdf((norm.ppf(p_default) - np.sqrt(rho) * m) / np.sqrt(1.0 - rho))
     return (binom.pmf(k[:, None], n_bonds, conditional[None, :]) * weights).sum(axis=1)
 
@@ -106,9 +110,11 @@ def exact_shortfall_probability(p: dict, due: np.ndarray) -> float | None:
     """
     n_periods = p["years"] * p["freq"]
     bond = promised_cash_flows(p["face"], p["coupon"], n_periods, p["freq"])
+    slack = p["n_bonds"] * bond - due
+    if (slack < -1e-12).any():
+        return 1.0  # the class is owed more than the pool even promises
     if p["lgd"] == 0:
         return 0.0
-    slack = p["n_bonds"] * bond - due
     needed = np.floor(slack / (p["lgd"] * bond) + 1e-12).astype(int) + 1
     if needed.min() > p["n_bonds"]:
         return 0.0

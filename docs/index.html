@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Miniproject 3 - Simplified CDO Analysis</title>
 <meta name="description" content="Simulated cash flows of a CDO backed by 10 speculative grade bonds: correlated defaults from fixed random numbers, the BIS debt model and a Class A / Class B / equity waterfall. FRE 6103, NYU Tandon.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231e3a5f'/%3E%3Crect x='7' y='20' width='18' height='5' fill='%23eb6834'/%3E%3Crect x='7' y='14' width='18' height='5' fill='%231baf7a'/%3E%3Crect x='7' y='7' width='18' height='6' fill='%232a78d6'/%3E%3C/svg%3E">
@@ -15,7 +15,7 @@
   --bg:#f8fafc; --card:#ffffff; --fg:#0f172a; --fg-2:#475569; --muted:#e9eef5; --border:#cbd5e1;
   --primary:#1e3a5f; --accent:#b45309; --ring:#1e3a5f;
   --chart-surface:#fcfcfb; --grid:#e1e0d9; --axis:#c3c2b7;
-  --s-equity:#2a78d6; --s-a:#eb6834; --s-b:#1baf7a; --s-pool:#52514e; --s-bench:#c3c2b7;
+  --s-equity:#2a78d6; --s-a:#eb6834; --s-b:#1baf7a; --s-pool:#52514e; --s-bench:#898781;
   --serif:"Crimson Pro",Georgia,"Times New Roman",serif;
   --sans:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
@@ -25,7 +25,7 @@
     --bg:#0d0d0d; --card:#1a1a19; --fg:#ffffff; --fg-2:#c3c2b7; --muted:#242423; --border:#383835;
     --primary:#9ec5f4; --accent:#f0b26b; --ring:#9ec5f4;
     --chart-surface:#1a1a19; --grid:#2c2c2a; --axis:#383835;
-    --s-equity:#3987e5; --s-a:#d95926; --s-b:#199e70; --s-pool:#c3c2b7; --s-bench:#52514e;
+    --s-equity:#3987e5; --s-a:#d95926; --s-b:#199e70; --s-pool:#c3c2b7; --s-bench:#898781;
   }
 }
 *{box-sizing:border-box}
@@ -39,7 +39,7 @@ a:hover{color:var(--accent)}
 .skip:focus{left:16px}
 .wrap{max-width:1120px;margin:0 auto;padding:0 clamp(16px,4vw,40px)}
 header.site{border-bottom:1px solid var(--border);background:var(--card)}
-.top{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 0;flex-wrap:wrap}
+.top{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-top:14px;padding-bottom:14px;flex-wrap:wrap}
 .brand{font-family:var(--serif);font-weight:600;font-size:18px;color:var(--primary)}
 nav.main{display:flex;gap:4px 18px;flex-wrap:wrap;font-size:14.5px}
 nav.main a{text-decoration:none;color:var(--fg-2);padding:6px 0}
@@ -57,7 +57,7 @@ h3{font-family:var(--serif);font-weight:600;font-size:22px;margin:22px 0 8px;col
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px}
 .split-32{display:grid;grid-template-columns:minmax(0,11fr) minmax(0,9fr);gap:18px}
 .split-23{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:18px}
-@media (max-width:900px){.split-32,.split-23{grid-template-columns:1fr}}
+@media (max-width:900px){.split-32,.split-23{grid-template-columns:minmax(0,1fr)}}
 .legend{display:flex;gap:8px 24px;flex-wrap:wrap;font-size:13.5px;color:var(--fg-2);margin:0 0 12px}
 .legend svg{color:var(--s-equity);vertical-align:middle;margin-right:8px}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:8px 0 6px}
@@ -74,13 +74,15 @@ input[type=number]{font:inherit;width:120px;padding:9px 12px;border:1px solid va
 .status{font-size:14px;color:var(--fg-2);margin:14px 0 0}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);text-decoration:none;font:inherit;font-weight:700;font-size:14.5px;cursor:pointer;transition:background .2s,border-color .2s}
 .btn:hover{border-color:var(--primary);background:var(--muted);color:var(--fg)}
-.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
 .toolbar{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:center;margin:0 0 14px}
 .toolbar label{font-size:14px;font-weight:700;color:var(--fg-2)}
 .chart-wrap{position:relative;height:340px;background:var(--chart-surface);border-radius:8px}
 .chart-wrap.short{height:280px}
 .case-charts{display:grid;grid-template-columns:minmax(0,5fr) minmax(150px,1fr);gap:14px}
-@media (max-width:720px){.case-charts{grid-template-columns:1fr}.chart-wrap{height:300px}}
+@media (max-width:720px){.case-charts{grid-template-columns:minmax(0,1fr)}.chart-wrap{height:300px}}
+/* grid items may shrink below the width of a table or chart canvas inside them, so the page never scrolls sideways */
+.grid2>*,.grid3>*,.case-charts>*,.split-32>*,.split-23>*,.inputs>*,.tiles>*{min-width:0}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
 .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
 .caption{font-size:13.5px;color:var(--fg-2);margin:10px 0 0}
@@ -123,6 +125,7 @@ footer{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--fg-2);
 </header>
 
 <main id="main" class="wrap">
+  <noscript><p class="card" style="margin-top:20px">This page computes its tables and charts in the browser, so it needs JavaScript. The same results are in the <a href="files/Miniproject3_CDO_Analysis_Report.pdf">PDF report</a>.</p></noscript>
   <div class="hero">
     <div class="eyebrow">NYU Tandon · FRE 6103 Valuation for Financial Engineering · Miniproject 3, Part 1</div>
     <h1>Simplified CDO Analysis</h1>
@@ -156,7 +159,7 @@ footer{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--fg-2);
           <input type="range" id="in-b" min="0" max="60" step="5"><div class="base" id="base-b"></div></div>
         <div class="field"><button type="button" class="btn" id="reset">Reset to the assignment's inputs</button></div>
       </form>
-      <p class="status" id="status" role="status" aria-live="polite"></p>
+      <p class="status"><span id="status" role="status" aria-live="polite"></span> <span id="check"></span></p>
     </div>
   </section>
 
@@ -266,7 +269,6 @@ footer{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--fg-2);
 
 <script src="data.js"></script>
 <script src="model.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 (function(){
   'use strict';
@@ -279,8 +281,10 @@ footer{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--fg-2);
   const pct = (x,n) => f(x*100,n) + '%';
   const money = (x,n) => '$' + f(x,n) + ' MM';
   const BASE = D.deal, N = D.z.length;
-  const hasCharts = typeof Chart !== 'undefined';
+  let chartState = typeof Chart !== 'undefined' ? 'ready' : 'loading';
   const charts = {};
+  const setDisabled = (el, off) => el.setAttribute('aria-disabled', off ? 'true' : 'false');
+  const isDisabled = el => el.getAttribute('aria-disabled') === 'true';
   let deal = Object.assign({}, BASE), run = null, caseNo = D.example_case;
 
   const CONTROLS = [
@@ -311,10 +315,12 @@ footer{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--fg-2);
   // ---- charts
   function draw(id, config){
     const canvas = $(id);
-    if(!hasCharts){
-      if(canvas) canvas.parentNode.innerHTML = '<p class="chart-fallback">The chart library could not be loaded (it comes from a CDN). Every value is in the tables on this page.</p>';
+    if(!canvas) return;
+    if(chartState === 'failed'){
+      canvas.parentNode.innerHTML = '<p class="chart-fallback">The chart library could not be loaded (it comes from a CDN). Every value is in the tables on this page.</p>';
       return;
     }
+    if(chartState !== 'ready') return;
     if(charts[id]) charts[id].destroy();
     charts[id] = new Chart(canvas, config);
   }
@@ -358,13 +364,18 @@ footer{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--fg-2);
   // ---- inputs
   function renderInputs(){
     CONTROLS.forEach(c => {
-      $('in-' + c.id).value = c.toInput(deal[c.key]);
+      const input = $('in-' + c.id);
+      input.value = c.toInput(deal[c.key]);
+      input.setAttribute('aria-valuetext', c.show(deal[c.key]));
       $('out-' + c.id).textContent = c.show(deal[c.key]);
       $('base-' + c.id).textContent = 'assignment: ' + c.show(BASE[c.key]);
     });
     const changed = CONTROLS.filter(c => Math.abs(deal[c.key] - BASE[c.key]) > 1e-12);
-    $('reset').disabled = changed.length === 0;
-    $('status').textContent = (changed.length ? 'Inputs changed from the assignment. ' : 'Showing the assignment\'s inputs. ') + checkMessage;
+    setDisabled($('reset'), changed.length === 0);
+    // the live region only changes when the state changes, so a screen reader is not interrupted on every step
+    const text = changed.length ? 'Inputs changed from the assignment.' : 'Showing the assignment\'s inputs.';
+    if($('status').textContent !== text) $('status').textContent = text;
+    $('check').textContent = checkMessage;
   }
   function onInput(){
     const next = Object.assign({}, deal);
@@ -395,7 +406,7 @@ footer{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--fg-2);
   function renderCase(){
     const i = caseNo - 1, n = run.nPeriods, d = M.caseDefaults(D.z[i], deal, run.L);
     $('case-no').value = caseNo;
-    $('case-prev').disabled = caseNo <= 1; $('case-next').disabled = caseNo >= N;
+    setDisabled($('case-prev'), caseNo <= 1); setDisabled($('case-next'), caseNo >= N);
     const defaulted = d.q.filter(q => q <= n).length;
 
     $('bond-table').tBodies[0].innerHTML = d.q.map((q, b) => {
@@ -542,12 +553,14 @@ footer{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--fg-2);
 
   function render(){ compute(); $('case-msg').textContent = ''; renderInputs(); renderTiles(); renderCase(); renderDistributions(); renderSensitivities(); }
 
-  if(hasCharts){ Chart.defaults.font.family = css('--sans'); Chart.defaults.font.size = 12.5; }
+  const chartDefaults = () => { Chart.defaults.font.family = css('--sans'); Chart.defaults.font.size = 12.5; };
+  if(chartState === 'ready') chartDefaults();
   CONTROLS.forEach(c => $('in-' + c.id).addEventListener('input', onInput));
-  $('reset').addEventListener('click', () => { deal = Object.assign({}, BASE); render(); });
+  // buttons that do not apply stay focusable (aria-disabled) so keyboard focus is never dropped
+  $('reset').addEventListener('click', e => { if(isDisabled(e.currentTarget)) return; deal = Object.assign({}, BASE); render(); });
   $('case-no').addEventListener('change', e => setCase(e.target.value));
-  $('case-prev').addEventListener('click', () => setCase(caseNo - 1));
-  $('case-next').addEventListener('click', () => setCase(caseNo + 1));
+  $('case-prev').addEventListener('click', e => { if(!isDisabled(e.currentTarget)) setCase(caseNo - 1); });
+  $('case-next').addEventListener('click', e => { if(!isDisabled(e.currentTarget)) setCase(caseNo + 1); });
   $('case-worst').addEventListener('click', () => {
     const worst = run.eqTotal.indexOf(Math.min.apply(null, run.eqTotal));
     setCase(worst + 1, 'Lowest total equity cash for the inputs above.');
@@ -555,6 +568,16 @@ footer{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--fg-2);
   if(window.matchMedia){ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render); }
   renderStatic();
   render();
+  // The tiles and tables are on screen now. The chart library is fetched afterwards, so a slow CDN cannot hold them up.
+  if(chartState !== 'ready'){
+    const lib = document.createElement('script');
+    lib.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js';
+    lib.integrity = 'sha384-dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG';
+    lib.crossOrigin = 'anonymous';
+    lib.onload = () => { chartState = 'ready'; chartDefaults(); render(); };
+    lib.onerror = () => { chartState = 'failed'; render(); };
+    document.head.appendChild(lib);
+  }
 })();
 </script>
 </body>

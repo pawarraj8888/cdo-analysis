@@ -156,6 +156,36 @@ def test_exact_shortfall_probability_in_the_base_and_stressed_deal(base):
     assert exact_shortfall_probability(stressed, base["a_due"]) == pytest.approx(exact[9:].sum())
 
 
+def test_exact_shortfall_probability_edge_cases(base):
+    classes_due = base["a_due"] + base["b_due"]
+    no_loss = {**BASE_DEAL, "lgd": 0.0}
+    assert exact_shortfall_probability(no_loss, classes_due) == 0.0
+    # a class owed more than the pool even promises is always short, whatever the LGD
+    assert exact_shortfall_probability(no_loss, base["pool_promised"] + 1.0) == 1.0
+    # when a coupon quarter binds before maturity there is no closed form, and the function says so
+    coupon_heavy = base["pool_promised"] * np.where(np.arange(20) < 19, 0.95, 0.05)
+    assert exact_shortfall_probability(BASE_DEAL, coupon_heavy) is None
+
+
+def test_exact_default_distribution_stays_accurate_at_high_correlation():
+    p_default = 1 - 0.96**5
+    Z = np.random.default_rng(7).standard_normal((400_000, 10))
+    defaults = (default_times(Z, 0.04, 0.9) <= 5.0).sum(axis=1)
+    simulated = np.bincount(defaults, minlength=11) / len(defaults)
+    exact = exact_default_count_distribution(10, p_default, 0.9)
+    assert exact.sum() == pytest.approx(1.0, abs=1e-10)
+    assert np.allclose(simulated, exact, atol=0.003)
+
+
+def test_bad_random_numbers_are_rejected(normals):
+    with_gap = normals.copy()
+    with_gap[0, 0] = np.nan
+    with pytest.raises(ValueError):
+        simulate(with_gap, BASE_DEAL)
+    with pytest.raises(ValueError):
+        simulate(normals[0], BASE_DEAL)
+
+
 def test_vectorized_model_matches_a_loop_implementation(normals):
     stressed = {**BASE_DEAL, "pd": 0.12, "lgd": 1.0, "rho": 0.6, "b_notional": 30.0}
     for deal in (BASE_DEAL, stressed):

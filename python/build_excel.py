@@ -70,7 +70,8 @@ THIN = Side(style="thin", color="BFBFBF")
 BOTTOM = Border(bottom=THIN)
 WRAP = Alignment(wrap_text=True, vertical="top")
 CENTER_WRAP = Alignment(wrap_text=True, vertical="center", horizontal="center")
-SERIES_COLORS = {"Class A": "EB6834", "Class B": "1BAF7A", "Equity": "2A78D6", "pool": "52514E", "benchmark": "C3C2B7"}
+SERIES_COLORS = {"Class A": "EB6834", "Class B": "1BAF7A", "Equity": "2A78D6", "pool": "52514E", "benchmark": "898781"}
+INPUT_LIMITS = {"pd_annual": (0, 0.9999), "lgd": (0, 1), "rho": (0, 0.9999)}   # anything else: 0 or more
 
 
 def header(ws, row: int, labels: list, start_col: int = 1, height: float | None = None) -> None:
@@ -143,6 +144,11 @@ def build_inputs(wb: Workbook, deal: dict, results: dict) -> None:
         ws[ref].number_format = fmt
         ws.cell(row=row, column=3, value=note)
         name(wb, label, f"Inputs!${ref[0]}${row}")
+        low, high = INPUT_LIMITS.get(label, (0, 1000000))
+        rule = DataValidation(type="decimal", operator="between", formula1=str(low), formula2=str(high),
+                              showErrorMessage=True, errorTitle=text, error=f"Enter a number from {low} to {high}.")
+        ws.add_data_validation(rule)
+        rule.add(ref)
     ws["A18"], ws["B18"], ws["C18"] = "Market YTM on the bonds", results["market_ytm"], "Given. Not used until Part 2."
     ws["A19"], ws["B19"], ws["C19"] = "Risk-free rate", results["risk_free"], "Given. Not used until Part 2."
     ws["B18"].number_format = ws["B19"].number_format = "0.00%"
@@ -415,7 +421,7 @@ def build_histogram(ws) -> None:
     for k in range(HIST_BINS):
         r = HIST_FIRST_ROW + k
         ws[f"A{r}"], ws[f"B{r}"] = low + 0.025 * k, low + 0.025 * (k + 1)
-        ws[f"C{r}"] = f'=TEXT(B{r},"0.0%")'
+        ws[f"C{r}"] = f'="up to "&TEXT(B{r},"0.0%")' if k == 0 else f'=TEXT(B{r},"0.0%")'
         for letter, data, promised in (("D", pool, f"$B${SUMMARY_FIRST_ROW}"), ("E", equity, f"$B${SUMMARY_FIRST_ROW + 3}")):
             lower = "" if k == 0 else f'{data},">"&({promised}*$A{r}+0.000000001),'
             ws[f"{letter}{r}"] = f'=COUNTIFS({lower}{data},"<="&({promised}*$B{r}+0.000000001))'
@@ -520,11 +526,12 @@ def build_workbook(table, results: dict, deal: dict, case: int) -> Workbook:
 def parse_overrides(pairs: list) -> dict:
     """--set lgd=1.0 pd=0.12 style overrides of the base deal (used to test the formulas)."""
     deal = dict(BASE_DEAL)
+    allowed = sorted(key for _, key in INPUT_CELLS.values())   # the layout fixes n_bonds, years and freq
     for pair in pairs:
         key, _, value = pair.partition("=")
-        if key not in deal or not value:
-            raise SystemExit(f"--set expects key=value with a known key, got {pair!r}")
-        deal[key] = type(deal[key])(float(value))
+        if key not in allowed or not value:
+            raise SystemExit(f"--set expects key=value with one of {allowed}, got {pair!r}")
+        deal[key] = float(value)
     return deal
 
 

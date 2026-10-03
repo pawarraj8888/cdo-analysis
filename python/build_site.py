@@ -22,9 +22,6 @@ DOWNLOADS = [
     ("data/fixed_random_numbers.csv", "fixed_random_numbers.csv"),
     ("output/case_totals.csv", "case_totals.csv"),
     ("output/pool_cash_flows.csv", "pool_cash_flows.csv"),
-    ("output/default_quarters.csv", "default_quarters.csv"),
-    ("output/quarterly_cash_flow_summary.csv", "quarterly_cash_flow_summary.csv"),
-    ("output/sensitivities.csv", "sensitivities.csv"),
 ]
 
 

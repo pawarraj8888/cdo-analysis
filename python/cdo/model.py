@@ -37,15 +37,17 @@ def validate_deal(p: dict) -> None:
     if not 0.0 <= p["rho"] < 1.0:
         raise ValueError(f"correlation must be in [0, 1), got {p['rho']}")
     for key in ("face", "coupon", "a_notional", "a_coupon", "b_notional", "b_coupon"):
-        if p[key] < 0:
-            raise ValueError(f"{key} cannot be negative, got {p[key]}")
+        if not p[key] >= 0:
+            raise ValueError(f"{key} must be a number that is not negative, got {p[key]}")
 
 
 def simulate(Z: np.ndarray, p: dict) -> dict:
     """Run the whole model for the parameter set p on the independent normals Z (cases x bonds)."""
     validate_deal(p)
-    if Z.shape[1] != p["n_bonds"]:
-        raise ValueError(f"random numbers have {Z.shape[1]} columns but the deal has {p['n_bonds']} bonds")
+    if Z.ndim != 2 or Z.shape[1] != p["n_bonds"]:
+        raise ValueError(f"random numbers must be a cases x {p['n_bonds']} table, got shape {Z.shape}")
+    if not np.isfinite(Z).all():
+        raise ValueError("random numbers contain values that are not finite")
     n_periods = p["years"] * p["freq"]
     bond_promised = promised_cash_flows(p["face"], p["coupon"], n_periods, p["freq"])
     T = default_times(Z, p["pd"], p["rho"])

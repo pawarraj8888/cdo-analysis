@@ -99,13 +99,20 @@ def check_statistics(report: Report, wb, Z: np.ndarray, deal: dict, r: dict) -> 
     python = []
     for total, amount in zip(totals, promised):
         d = describe(total, amount)
-        python.append([d["promised"], d["mean"], d["std dev"], d["min"], d["5th pct"], d["median"], d["95th pct"], d["max"]])
-    report.compare("Statistics: summary table (promised .. max)", read_block(ws, layout.SUMMARY_FIRST_ROW, 2, 4, 8), python, 1e-9)
+        python.append([d["promised"], d["mean"], d["std dev"], d["min"], d["5th pct"], d["median"], d["95th pct"], d["max"],
+                       d["mean / promised"] if amount else 0.0, (total < amount - 1e-9).mean()])
+    report.compare("Statistics: summary table (promised .. share below)", read_block(ws, layout.SUMMARY_FIRST_ROW, 2, 4, 10), python, 1e-9)
 
     n_defaults = r["defaulted"].sum(axis=1)
     counts = np.bincount(n_defaults, minlength=N_BONDS + 1)
     p_default = 1.0 - (1.0 - deal["pd"]) ** deal["years"]
     report.compare("Statistics: cases by number of defaults", read_block(ws, layout.DIST_FIRST_ROW, 2, N_BONDS + 1, 1)[:, 0], counts, 0)
+    report.compare("Statistics: simulated share by number of defaults", read_block(ws, layout.DIST_FIRST_ROW, 3, N_BONDS + 1, 1)[:, 0],
+                   counts / N_CASES, 1e-12)
+    seen = np.flatnonzero(counts)
+    averages = [[totals[0][n_defaults == k].mean(), totals[3][n_defaults == k].mean()] for k in seen]
+    report.compare("Statistics: average pool and equity cash by defaults", read_block(ws, layout.DIST_FIRST_ROW, 5, N_BONDS + 1, 2)[seen],
+                   averages, 1e-9)
     report.compare("Statistics: binomial benchmark", read_block(ws, layout.DIST_FIRST_ROW, 4, N_BONDS + 1, 1)[:, 0],
                    binom.pmf(np.arange(N_BONDS + 1), N_BONDS, p_default), 1e-12)
 

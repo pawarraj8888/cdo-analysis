@@ -1,3 +1,6 @@
+> **Moved.** This project now lives in [`valuation-assignments/miniproject-3-cdo-analysis`](https://github.com/pawarraj8888/valuation-assignments/tree/main/miniproject-3-cdo-analysis), together with the other FRE 6103 mini-projects. Dashboard: https://pawarraj8888.github.io/valuation-assignments/cdo-analysis/
+> This repository is kept only so that old links keep working and is no longer updated.
+
 # Miniproject 3 (Part 1) - Simplified CDO Analysis
 
 **FRE 6103 Valuation for Financial Engineering (NYU Tandon)** | Raj Pawar (rsp9234) and Michael Brick (mb11311)

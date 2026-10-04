@@ -73,20 +73,21 @@ def test_notebook_sensitivities_match_the_package(notebook, normals):
 
 def test_notebook_summary_table(notebook):
     summary = notebook["summary"]
-    assert summary.loc["Equity (bank)", "Promised ($MM)"] == pytest.approx(96.0)
-    assert summary.loc["Equity (bank)", "Mean ($MM)"] == pytest.approx(82.769, abs=1e-3)
-    assert summary.loc["Class A", "P(below promised)"] == 0
-    assert summary.loc["Class B", "P(below promised)"] == 0
+    assert summary.loc["Equity (bank)", "No-default amount ($MM)"] == pytest.approx(96.0)
+    assert summary.loc["Equity (bank)", "Mean ($MM)"] == pytest.approx(83.283, abs=1e-3)
+    assert summary.loc["Class A", "P(below no-default amount)"] == 0
+    assert summary.loc["Class B", "P(below no-default amount)"] == 0
 
 
 def test_notebook_writes_nothing_but_the_random_numbers(notebook):
     assert sorted(p.name for p in notebook["_folder"].iterdir()) == ["fixed_random_numbers.csv"]
 
 
-def test_notebook_recreates_the_random_numbers_when_the_file_is_missing(tmp_path, normals):
+def test_notebook_recreates_the_random_numbers_when_the_file_is_missing(tmp_path, raw_normals, normals):
     namespace = run_notebook_cells(tmp_path)
     assert (tmp_path / "fixed_random_numbers.csv").exists()
     assert namespace["source"].startswith("generated")
+    assert np.array_equal(namespace["Z_raw"], raw_normals)
     assert np.array_equal(namespace["Z"], normals)
 
 

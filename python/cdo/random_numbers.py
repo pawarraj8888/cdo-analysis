@@ -10,6 +10,22 @@ SEED = 6103
 N_CASES = 1000
 
 
+def moment_match(Z: np.ndarray) -> np.ndarray:
+    """De-mean the draws and rescale them so the sample has exactly the moments of independent standard normals.
+
+    As shown in class: subtract each column's mean, take the population covariance of the draws and
+    multiply the de-meaned draws by the inverse of its Cholesky factor. Afterwards every bond's
+    numbers have mean 0 and variance 1 across the cases, and no two bonds' numbers are correlated.
+    """
+    Z = np.asarray(Z, dtype=float)
+    if Z.ndim != 2 or Z.shape[0] <= Z.shape[1]:
+        raise ValueError(f"moment matching needs a cases x bonds table with more cases than bonds, got shape {Z.shape}")
+    demeaned = Z - Z.mean(axis=0)
+    covariance = demeaned.T @ demeaned / len(Z)
+    chol = np.linalg.cholesky(covariance)
+    return np.linalg.solve(chol, demeaned.T).T      # same as demeaned @ inverse(chol).T
+
+
 def load_fixed_normals(path: Path, n_cases: int, n_bonds: int, seed: int) -> tuple:
     """Read the fixed random numbers, creating the file from the seed if it is missing.
 

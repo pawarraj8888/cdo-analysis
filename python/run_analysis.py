@@ -19,7 +19,7 @@ import pandas as pd  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from cdo import BASE_DEAL, N_CASES, SEED, build_results, load_fixed_normals, simulate  # noqa: E402
+from cdo import BASE_DEAL, N_CASES, SEED, build_results, load_fixed_normals, moment_match, simulate  # noqa: E402
 from cdo.report import (  # noqa: E402
     apply_chart_style,
     plot_case,
@@ -100,12 +100,14 @@ def main(argv=None) -> int:
     figures.mkdir(parents=True, exist_ok=True)
 
     table, source = load_fixed_normals(Path(args.data), N_CASES, BASE_DEAL["n_bonds"], SEED)
-    Z = table.values
-    results = build_results(Z, BASE_DEAL, SEED, example_case=args.case)
+    raw = table.values
+    Z = moment_match(raw)      # de-meaned and moment matched: the numbers the model uses
+    results = build_results(Z, BASE_DEAL, SEED, example_case=args.case, raw=raw)
     r = simulate(Z, BASE_DEAL)
 
     write_json(out / "results.json", results)
     write_tables(out, results, r, list(table.columns))
+    pd.DataFrame(Z, index=table.index, columns=table.columns).to_csv(out / "moment_matched_random_numbers.csv", float_format="%.12f")
     write_figures(figures, results, r)
 
     checks = results["checks"]
@@ -113,9 +115,9 @@ def main(argv=None) -> int:
     print(f"Random numbers: {Z.shape[0]} cases x {Z.shape[1]} bonds ({source})")
     print(f"BIS slide check: {checks['slide_value']:.2f} (slide {checks['slide_target']:.2f})")
     print(f"Average defaults per case: {checks['avg_defaults_simulated']:.3f} (theory {checks['avg_defaults_theory']:.3f})")
-    print(f"Pool total:   mean {summary['pool']['mean']:.3f} of {summary['pool']['promised']:.0f}, "
+    print(f"Pool total:   mean {summary['pool']['mean']:.3f} of {summary['pool']['no-default amount']:.0f}, "
           f"5th pct {summary['pool']['5th pct']:.3f}, min {summary['pool']['min']:.2f}")
-    print(f"Equity total: mean {summary['equity']['mean']:.3f} of {summary['equity']['promised']:.0f}, "
+    print(f"Equity total: mean {summary['equity']['mean']:.3f} of {summary['equity']['no-default amount']:.0f}, "
           f"5th pct {summary['equity']['5th pct']:.3f}, min {summary['equity']['min']:.2f}")
     print(f"Cases with a shortfall: Class A {checks['class_a_shortfall_cases']}, Class B {checks['class_b_shortfall_cases']}")
     print(f"Outputs written to {out.resolve()}")

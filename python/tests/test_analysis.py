@@ -59,10 +59,10 @@ def test_fixed_random_numbers_have_the_expected_shape(normals):
     assert normals.shape == (1000, 10)
 
 
-def test_fixed_random_numbers_are_the_seeded_draws(tmp_path, normals):
+def test_fixed_random_numbers_are_the_seeded_draws(tmp_path, raw_normals):
     table, source = load_fixed_normals(tmp_path / "fresh.csv", 1000, 10, SEED)
     assert source.startswith("generated")
-    assert np.array_equal(table.values, normals)
+    assert np.array_equal(table.values, raw_normals)
 
 
 def test_loading_a_file_with_the_wrong_shape_is_rejected(tmp_path):
@@ -74,26 +74,26 @@ def test_loading_a_file_with_the_wrong_shape_is_rejected(tmp_path):
 
 def test_base_case_default_counts(base):
     n_defaults = base["defaulted"].sum(axis=1)
-    assert np.bincount(n_defaults, minlength=11).tolist() == [261, 242, 198, 120, 77, 56, 23, 14, 7, 2, 0]
-    assert n_defaults.mean() == pytest.approx(1.896)
+    assert np.bincount(n_defaults, minlength=11).tolist() == [257, 253, 200, 131, 77, 49, 16, 11, 5, 1, 0]
+    assert n_defaults.mean() == pytest.approx(1.821)
 
 
 def test_base_case_pool_and_equity_totals(base):
     pool = base["pool_cf"].sum(axis=1)
     equity = base["eq_cf"].sum(axis=1)
-    assert pool.mean() == pytest.approx(116.769, abs=1e-3)
-    assert pool.std(ddof=1) == pytest.approx(12.789, abs=1e-3)
-    assert pool.min() == pytest.approx(63.58)
-    assert equity.mean() == pytest.approx(82.769, abs=1e-3)
-    assert np.percentile(equity, 5) == pytest.approx(58.9755, abs=1e-3)
+    assert pool.mean() == pytest.approx(117.283, abs=1e-3)
+    assert pool.std(ddof=1) == pytest.approx(12.032, abs=1e-3)
+    assert pool.min() == pytest.approx(64.48)
+    assert equity.mean() == pytest.approx(83.283, abs=1e-3)
+    assert np.percentile(equity, 5) == pytest.approx(60.6855, abs=1e-3)
     assert int(np.argmin(equity)) + 1 == 760
 
 
 def test_case_five_defaults(base):
     quarters = base["Q"][4]
-    assert quarters[[0, 3, 4, 5, 6, 8]].tolist() == [4, 18, 4, 12, 10, 9]
+    assert quarters[[0, 3, 4, 5, 6, 8]].tolist() == [4, 20, 5, 13, 12, 7]
     assert (quarters[[1, 2, 7, 9]] == 21).all()
-    assert base["pool_cf"][4].sum() == pytest.approx(87.79)
+    assert base["pool_cf"][4].sum() == pytest.approx(88.15)
 
 
 def test_classes_are_never_short_in_the_base_case(base):
@@ -253,5 +253,6 @@ def test_results_are_json_ready_and_consistent(normals):
     assert len(results["cases"]) == 1000
     assert len(results["quarterly"]) == 20
     equity = next(row for row in results["summary"] if row["series"] == "equity")
-    assert equity["promised"] == pytest.approx(96.0)
-    assert equity["mean"] == pytest.approx(82.769, abs=1e-3)
+    assert equity["no-default amount"] == pytest.approx(96.0)
+    assert equity["mean"] == pytest.approx(83.283, abs=1e-3)
+    assert equity["std error"] == pytest.approx(equity["std dev"] / 1000**0.5)

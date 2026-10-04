@@ -24,18 +24,19 @@ STRESS_RHO_GRID = (0.0, 0.20, 0.40, 0.60, 0.80)
 SLIDE_EXAMPLE = {"face": 1000.0, "coupon": 0.055, "years": 5, "pd": 0.03, "lgd": 0.60, "rate": 0.04, "value": 984.73}
 
 
-def describe(x: np.ndarray, promised: float) -> dict:
-    """Summary statistics of one total per case, next to the promised amount."""
+def describe(x: np.ndarray, no_default: float) -> dict:
+    """Summary statistics of one total per case, next to what it would be with no defaults."""
     return {
-        "promised": promised,
+        "no-default amount": no_default,
         "mean": x.mean(),
         "std dev": x.std(ddof=1),
+        "std error": x.std(ddof=1) / np.sqrt(len(x)),      # of the mean, treating the cases as independent
         "min": x.min(),
         "5th pct": np.percentile(x, 5),
         "median": np.median(x),
         "95th pct": np.percentile(x, 95),
         "max": x.max(),
-        "mean / promised": x.mean() / promised if promised else np.nan,
+        "mean / no-default amount": x.mean() / no_default if no_default else np.nan,
     }
 
 
@@ -190,7 +191,22 @@ def _records(table: pd.DataFrame) -> list:
     return json.loads(table.reset_index().to_json(orient="records"))
 
 
-def build_results(Z: np.ndarray, base: dict, seed: int, example_case: int = 5) -> dict:
+def moment_matching_summary(raw: np.ndarray, matched: np.ndarray) -> dict:
+    """How far the stored draws are from the moments of independent standard normals, before and after matching."""
+    def moments(A: np.ndarray) -> dict:
+        cov = np.cov(A, rowvar=False, bias=True)
+        corr = np.corrcoef(A, rowvar=False)
+        off = ~np.eye(A.shape[1], dtype=bool)
+        return {
+            "max_abs_mean": float(np.abs(A.mean(axis=0)).max()),
+            "min_variance": float(cov.diagonal().min()),
+            "max_variance": float(cov.diagonal().max()),
+            "max_abs_correlation": float(np.abs(corr[off]).max()),
+        }
+    return {"raw": moments(raw), "matched": moments(matched)}
+
+
+def build_results(Z: np.ndarray, base: dict, seed: int, example_case: int = 5, raw: np.ndarray | None = None) -> dict:
     """Everything the report, the Excel check and the site need, as plain JSON-ready values."""
     r = simulate(Z, base)
     n_cases, n_bonds = Z.shape
@@ -209,7 +225,7 @@ def build_results(Z: np.ndarray, base: dict, seed: int, example_case: int = 5) -
     promised["equity"] = promised["pool"] - promised["class_a"] - promised["class_b"]
 
     summary = pd.DataFrame({name: describe(totals[name], promised[name]) for name in totals}).T.rename_axis("series")
-    summary["P(below promised)"] = [
+    summary["P(below no-default amount)"] = [
         (totals["pool"] < promised["pool"] - tol).mean(),
         (a_short > tol).mean(),
         (b_short > tol).mean(),
@@ -235,6 +251,7 @@ def build_results(Z: np.ndarray, base: dict, seed: int, example_case: int = 5) -
         "market_ytm": MARKET_YTM,
         "risk_free": RISK_FREE,
         "seed": seed,
+        "moment_matching": moment_matching_summary(raw, Z) if raw is not None else None,
         "n_cases": n_cases,
         "n_bonds": n_bonds,
         "n_periods": int(r["pool_cf"].shape[1]),

@@ -24,7 +24,7 @@ NORMAL_GRID = [x / 8.0 for x in range(-80, 81)]
 SCRIPT = """
 const model = require(process.argv[process.argv.length - 1]);
 const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-const out = { cdf: input.grid.map(model.normCdf), runs: [] };
+const out = { cdf: input.grid.map(model.normCdf), matched: model.momentMatch(input.raw), runs: [] };
 for (const deal of input.deals) {
   const r = model.simulate(input.z, deal);
   out.runs.push({ Q: r.Q, pool: r.pool, a: r.a, b: r.b, equity: r.equity, summary: model.summaryRow(input.z, deal),
@@ -36,14 +36,21 @@ process.stdout.write(JSON.stringify(out));
 
 
 @pytest.fixture(scope="module")
-def javascript(normals) -> dict:
+def javascript(raw_normals, normals) -> dict:
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
-    payload = json.dumps({"z": normals.tolist(), "deals": [deal for _, deal in DEALS], "grid": NORMAL_GRID})
+    payload = json.dumps({"raw": raw_normals.tolist(), "z": normals.tolist(), "deals": [deal for _, deal in DEALS], "grid": NORMAL_GRID})
     done = subprocess.run([node, "-e", SCRIPT, str(MODEL_JS)], input=payload, capture_output=True, text=True, timeout=120)
     assert done.returncode == 0, done.stderr
     return json.loads(done.stdout)
+
+
+def test_moment_matching_matches_python(javascript, normals):
+    matched = np.array(javascript["matched"])
+    assert np.allclose(matched, normals, rtol=0, atol=1e-12)
+    # the page applies its own moment matching to the stored draws: it must lead to the same defaults
+    assert np.array_equal(simulate(matched, BASE_DEAL)["Q"], simulate(normals, BASE_DEAL)["Q"])
 
 
 def test_normal_cdf_matches_scipy(javascript):

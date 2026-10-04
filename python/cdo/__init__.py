@@ -18,7 +18,7 @@ from .analysis import (
 from .bonds import bis_cash_flows, bis_expected_value, promised_cash_flows
 from .defaults import correlate, correlation_matrix, default_period, default_times
 from .model import BASE_DEAL, MARKET_YTM, RISK_FREE, simulate, validate_deal
-from .random_numbers import N_CASES, SEED, load_fixed_normals
+from .random_numbers import N_CASES, SEED, load_fixed_normals, moment_match
 from .waterfall import waterfall
 
 # Shown on the notebook, the write-up and the project page.
@@ -28,8 +28,8 @@ PROJECT = {
     "course": "FRE 6103 Valuation for Financial Engineering (NYU Tandon)",
     "authors": "Raj Pawar (rsp9234) and Michael Brick (mb11311)",
     "members_line": "Raj Pawar rsp9234, Michael Brick mb11311",
-    "repo_url": "https://github.com/pawarraj8888/cdo-analysis",
-    "site_url": "https://pawarraj8888.github.io/cdo-analysis/",
+    "repo_url": "https://github.com/pawarraj8888/valuation-assignments/tree/main/miniproject-3-cdo-analysis",
+    "site_url": "https://pawarraj8888.github.io/valuation-assignments/cdo-analysis/",
 }
 
 __all__ = [
@@ -58,4 +58,5 @@ __all__ = [
     "quarterly_table",
     "build_results",
     "load_fixed_normals",
+    "moment_match",
 ]

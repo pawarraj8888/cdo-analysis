@@ -4,7 +4,7 @@
 Layout (the way the workbook would be built by hand in Excel):
     Inputs       deal parameters (yellow cells) and the promised cash flow schedule
     Case         case selector: default times and quarterly cash flows of the chosen case
-    Random       the 1000 x 10 fixed independent normals, pasted as values
+    Random       the 1000 x 10 fixed independent normals (values), then de-meaned and moment matched (formulas)
     Defaults     Cholesky factor, correlated normals, uniforms, default times and quarters
     CashFlows    pool cash flow and the waterfall for every case and quarter
     Statistics   summary statistics, default-count distribution, quarterly table, histogram
@@ -27,6 +27,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter as col
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.formula import ArrayFormula
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -49,6 +50,11 @@ CASE_CELL = "B2"                            # Case sheet, named case_number
 CASE_BOND_FIRST_ROW = 6                     # Case!A6:H15 one row per bond
 CASE_CF_FIRST_ROW = 20                      # Case!A20:P39 one row per quarter
 
+RAND_RAW_COL, RAND_DEMEANED_COL, RAND_MATCHED_COL, RAND_CHECK_COL = 2, 13, 24, 35   # Random: B, M, X, AI
+RAND_MATRIX_FIRST_ROW = 4                   # Random rows 4-13: covariance, its Cholesky factor, the inverse, a check
+RAND_MEAN_ROW = 15                          # Random row 15: column means
+CASES_CELL = "B21"                          # Inputs sheet, named Number_of_Cases
+CASE_QUARTER_COL = 7                        # Case!G: default quarter of each bond
 CHOL_FIRST_ROW = 4                          # Defaults!B4:K13
 DEF_X_COL, DEF_U_COL, DEF_T_COL, DEF_Q_COL, DEF_COUNT_COL = 2, 13, 24, 35, 46
 CF_POOL_COL, CF_A_COL, CF_B_COL, CF_EQ_COL, CF_TOTAL_COL = 2, 23, 44, 65, 86
@@ -153,6 +159,9 @@ def build_inputs(wb: Workbook, deal: dict, results: dict) -> None:
     ws["A19"], ws["B19"], ws["C19"] = "Risk-free rate", results["risk_free"], "Given. Not used until Part 2."
     ws["B18"].number_format = ws["B19"].number_format = "0.00%"
     ws["A20"], ws["B20"] = "Seed of the fixed random numbers", results["seed"]
+    ws["A21"], ws[CASES_CELL] = "Number of cases", f"=COUNT(Random!$A${FIRST_ROW}:$A${LAST_ROW})"
+    ws["C21"] = "Given. Counted from the Random sheet: the layout has one row per case, so this is not an input."
+    name(wb, "Number_of_Cases", f"Inputs!${CASES_CELL[0]}${CASES_CELL[1:]}")
 
     ws["A23"] = "Promised cash flows ($MM)"
     ws["A23"].font = BOLD
@@ -177,18 +186,64 @@ def build_inputs(wb: Workbook, deal: dict, results: dict) -> None:
 
 def build_random(wb: Workbook, table) -> None:
     ws = wb.create_sheet("Random")
-    ws["A1"] = "Fixed random numbers"
+    ws["A1"] = "Fixed random numbers and moment matching"
     ws["A1"].font = TITLE
     ws["A2"] = (f"{N_CASES} cases x {N_BONDS} bonds of independent standard normals, generated once in Python "
-                f"(numpy default_rng, seed {SEED}) and stored as values, so every recalculation uses the same numbers.")
-    header(ws, FIRST_ROW - 1, ["Case"] + list(table.columns))
+                f"(numpy default_rng, seed {SEED}) and stored as values, so every recalculation uses the same numbers. "
+                "They are then de-meaned and moment matched: multiplied by the inverse of the Cholesky factor of their "
+                "covariance, which gives numbers with means of exactly 0, variances of exactly 1 and no correlation.")
+    first, last = RAND_MATRIX_FIRST_ROW, RAND_MATRIX_FIRST_ROW + N_BONDS - 1
+    raw, demeaned, matched, check = RAND_RAW_COL, RAND_DEMEANED_COL, RAND_MATCHED_COL, RAND_CHECK_COL
+    labels = [(raw, "Covariance of the initial numbers (population)"), (demeaned, "Cholesky factor L of that covariance"),
+              (matched, "Inverse of L"), (check, "Check: covariance of the moment-matched numbers (identity)")]
+    for start, label in labels:
+        ws.cell(row=first - 1, column=start, value=label).font = BOLD
+    for i in range(1, N_BONDS + 1):
+        r = first + i - 1
+        for j in range(1, N_BONDS + 1):
+            ws.cell(row=r, column=raw + j - 1, value=f"=COVAR({column_range(raw + i - 1)},{column_range(raw + j - 1)})")
+            ws.cell(row=r, column=demeaned + j - 1, value=general_cholesky_formula(i, j, raw, demeaned, first))
+            ws.cell(row=r, column=check + j - 1,
+                    value=f"=COVAR({column_range(matched + i - 1)},{column_range(matched + j - 1)})")
+            for start in (raw, demeaned, matched, check):
+                ws.cell(row=r, column=start + j - 1).number_format = "0.000000"
+    inverse = f"{col(matched)}{first}:{col(matched + N_BONDS - 1)}{last}"
+    ws[f"{col(matched)}{first}"] = ArrayFormula(inverse, f"=MINVERSE({col(demeaned)}{first}:{col(demeaned + N_BONDS - 1)}{last})")
+
+    ws.cell(row=RAND_MEAN_ROW, column=1, value="Mean").font = BOLD
+    titles = [(raw, "Initial random normals"), (demeaned, "De-meaned (initial number minus its column mean)"),
+              (matched, "Moment matched = de-meaned x inverse of L (the numbers the model uses)")]
+    for start, label in titles:
+        ws.cell(row=FIRST_ROW - 2, column=start, value=label).font = BOLD
+        header(ws, FIRST_ROW - 1, list(table.columns), start_col=start)
+        for j in range(N_BONDS):
+            ws.cell(row=RAND_MEAN_ROW, column=start + j, value=f"=AVERAGE({column_range(start + j)})").number_format = "0.000000"
+    header(ws, FIRST_ROW - 1, ["Case"])
     for i, values in enumerate(table.values):
         r = FIRST_ROW + i
         ws.cell(row=r, column=1, value=i + 1)
         for j, value in enumerate(values):
-            ws.cell(row=r, column=2 + j, value=float(value)).number_format = "0.0000000000"
+            ws.cell(row=r, column=raw + j, value=float(value)).number_format = "0.0000000000"
+            ws.cell(row=r, column=demeaned + j, value=f"={col(raw + j)}{r}-{col(raw + j)}${RAND_MEAN_ROW}")
+            ws.cell(row=r, column=matched + j,
+                    value=f"=SUMPRODUCT({block(demeaned, r, N_BONDS)},{block(matched, first + j, N_BONDS, absolute_row=True)})")
     ws.freeze_panes = f"B{FIRST_ROW}"
-    widths(ws, {"A": 8, **{col(c): 14 for c in range(2, 2 + N_BONDS)}})
+    widths(ws, {"A": 8, **{col(c): 14 for c in range(2, check + N_BONDS)}})
+
+
+def general_cholesky_formula(i: int, j: int, cov_col: int, chol_col: int, first_row: int) -> str | int:
+    """Cell formula for entry (i, j), counted from 1, of the lower Cholesky factor of the matrix stored at cov_col."""
+    row_i, row_j = first_row + i - 1, first_row + j - 1
+    if j > i:
+        return 0
+    target = f"{col(cov_col + j - 1)}{row_i}"
+    if j == 1:
+        return f"=SQRT({target})" if i == 1 else f"={target}/${col(chol_col)}${first_row}"
+    before_i = f"${col(chol_col)}{row_i}:{col(chol_col + j - 2)}{row_i}"
+    if j == i:
+        return f"=SQRT({target}-SUMSQ({before_i}))"
+    before_j = f"${col(chol_col)}{row_j}:{col(chol_col + j - 2)}{row_j}"
+    return f"=({target}-SUMPRODUCT({before_i},{before_j}))/{col(chol_col + j - 1)}{row_j}"
 
 
 def cholesky_formula(i: int, j: int) -> str | int:
@@ -210,8 +265,9 @@ def build_defaults(wb: Workbook) -> None:
     ws = wb.create_sheet("Defaults")
     ws["A1"] = "Correlated default times"
     ws["A1"].font = TITLE
-    ws["A2"] = ("Cholesky factor L of the 10 x 10 matrix with 1 on the diagonal and rho elsewhere. Each case: "
-                "x = L z, u = N(x), t = ln(1 - u) / ln(1 - pi) in years, default quarter = roundup(4 t); 21 means no default.")
+    ws["A2"] = ("Cholesky factor L of the 10 x 10 matrix with 1 on the diagonal and rho elsewhere. Each case: x = L m, "
+                "with m the moment-matched numbers from the Random sheet, u = N(x), t = ln(1 - u) / ln(1 - pi) in years, "
+                "default quarter = roundup(4 t); 21 means no default.")
     header(ws, CHOL_FIRST_ROW - 1, ["L"] + [f"col {j}" for j in range(1, N_BONDS + 1)])
     for i in range(1, N_BONDS + 1):
         ws.cell(row=CHOL_FIRST_ROW + i - 1, column=1, value=f"Bond {i}").font = BOLD
@@ -231,7 +287,7 @@ def build_defaults(wb: Workbook) -> None:
         for i in range(N_BONDS):
             x, u, t = col(DEF_X_COL + i), col(DEF_U_COL + i), col(DEF_T_COL + i)
             chol_row = CHOL_FIRST_ROW + i
-            ws.cell(row=r, column=DEF_X_COL + i, value=f"=SUMPRODUCT(Random!$B{r}:$K{r},$B${chol_row}:$K${chol_row})")
+            ws.cell(row=r, column=DEF_X_COL + i, value=f"=SUMPRODUCT(Random!{block(RAND_MATCHED_COL, r, N_BONDS)},$B${chol_row}:$K${chol_row})")
             ws.cell(row=r, column=DEF_U_COL + i, value=f"=NORMSDIST({x}{r})")
             ws.cell(row=r, column=DEF_T_COL + i, value=f'=IF(pd_annual=0,"never",LN(1-{u}{r})/LN(1-pd_annual))')
             ws.cell(row=r, column=DEF_Q_COL + i,
@@ -298,21 +354,24 @@ def build_case(wb: Workbook, example_case: int) -> None:
 
     first, last = CASE_BOND_FIRST_ROW, CASE_BOND_FIRST_ROW + N_BONDS - 1
     cf_first, cf_last = CASE_CF_FIRST_ROW, CASE_CF_FIRST_ROW + N_PERIODS - 1
-    header(ws, first - 1, ["Bond", "Random normal z", "Correlated normal x", "Uniform u", "Default time (years)",
-                           "Default quarter (21 = none)", "Status", "Total cash received ($MM)"], height=32)
-    lookups = [("Random", 2, "0.0000"), ("Defaults", DEF_X_COL, "0.0000"), ("Defaults", DEF_U_COL, "0.0000"),
-               ("Defaults", DEF_T_COL, "0.00"), ("Defaults", DEF_Q_COL, "0")]
+    header(ws, first - 1, ["Bond", "Random normal z", "Moment-matched z", "Correlated normal x", "Uniform u",
+                           "Default time (years)", "Default quarter (21 = none)", "Status", "Total cash received ($MM)"],
+           height=32)
+    lookups = [("Random", RAND_RAW_COL, "0.0000"), ("Random", RAND_MATCHED_COL, "0.0000"), ("Defaults", DEF_X_COL, "0.0000"),
+               ("Defaults", DEF_U_COL, "0.0000"), ("Defaults", DEF_T_COL, "0.00"), ("Defaults", DEF_Q_COL, "0")]
+    quarter = col(CASE_QUARTER_COL)      # column letter of the default quarter
     for i in range(N_BONDS):
         r = first + i
         ws.cell(row=r, column=1, value=f"Bond {i + 1}")
         for k, (sheet, start, fmt) in enumerate(lookups):
             source = f"{sheet}!${col(start)}${FIRST_ROW}:${col(start + N_BONDS - 1)}${LAST_ROW}"
             ws.cell(row=r, column=2 + k, value=f"=INDEX({source},case_number,{i + 1})").number_format = fmt
-        ws.cell(row=r, column=7, value=f'=IF(F{r}<={N_PERIODS},"defaults in quarter "&F{r},"survives")')
-        ws.cell(row=r, column=8, value=f"=SUM({col(2 + i)}{cf_first}:{col(2 + i)}{cf_last})").number_format = "0.00"
+        ws.cell(row=r, column=CASE_QUARTER_COL + 1, value=f'=IF({quarter}{r}<={N_PERIODS},"defaults in quarter "&{quarter}{r},"survives")')
+        ws.cell(row=r, column=CASE_QUARTER_COL + 2,
+                value=f"=SUM({col(2 + i)}{cf_first}:{col(2 + i)}{cf_last})").number_format = "0.00"
     ws[f"A{last + 1}"] = "Bonds defaulting within 5 years"
-    ws[f"F{last + 1}"] = f'=COUNTIF(F{first}:F{last},"<={N_PERIODS}")'
-    ws[f"A{last + 1}"].font = ws[f"F{last + 1}"].font = BOLD
+    ws[f"{quarter}{last + 1}"] = f'=COUNTIF({quarter}{first}:{quarter}{last},"<={N_PERIODS}")'
+    ws[f"A{last + 1}"].font = ws[f"{quarter}{last + 1}"].font = BOLD
 
     labels = ["Quarter"] + [f"Bond {i}" for i in range(1, N_BONDS + 1)] + ["Pool", "Class A", "Class B", "Equity",
                                                                            "Pool promised"]
@@ -321,7 +380,7 @@ def build_case(wb: Workbook, example_case: int) -> None:
         r, schedule = cf_first + q, SCHEDULE_FIRST_ROW + q
         ws.cell(row=r, column=1, value=q + 1)
         for i in range(N_BONDS):
-            ws.cell(row=r, column=2 + i, value=f"=Inputs!$B${schedule}*IF($A{r}>=$F${first + i},1-lgd,1)")
+            ws.cell(row=r, column=2 + i, value=f"=Inputs!$B${schedule}*IF($A{r}>=${quarter}${first + i},1-lgd,1)")
         ws[f"L{r}"] = f"=SUM(B{r}:K{r})"
         ws[f"M{r}"] = f"=MIN(L{r},Inputs!$D${schedule})"
         ws[f"N{r}"] = f"=MIN(L{r}-M{r},Inputs!$E${schedule})"
@@ -347,7 +406,7 @@ def build_case(wb: Workbook, example_case: int) -> None:
         series.graphicalProperties.solidFill = SERIES_COLORS[label]
     chart.height, chart.width = 8.5, 20
     ws.add_chart(chart, f"R{first - 1}")
-    widths(ws, {"A": 16, "B": 15, "C": 16, "D": 12, "E": 13, "F": 14, "G": 22, "H": 15})
+    widths(ws, {"A": 16, "B": 15, "C": 16, "D": 16, "E": 12, "F": 13, "G": 14, "H": 22, "I": 15})
 
 
 def build_statistics(wb: Workbook) -> None:
@@ -356,8 +415,11 @@ def build_statistics(wb: Workbook) -> None:
     ws["A1"].font = TITLE
     ws["A3"] = "Total cash received over the 5 years"
     ws["A3"].font = BOLD
-    header(ws, SUMMARY_FIRST_ROW - 1, ["", "Promised", "Mean", "Std dev", "Min", "5th pct", "Median", "95th pct", "Max",
-                                       "Mean / promised", "Share of cases below promised"], height=44)
+    header(ws, SUMMARY_FIRST_ROW - 1, ["", "No-default amount", "Mean", "Std dev", "Std error of the mean", "Min", "5th pct",
+                                       "Median", "95th pct", "Max", "Mean / no-default amount",
+                                       "Share of cases below the no-default amount"], height=58)
+    ws[f"A{SUMMARY_FIRST_ROW + 4}"] = ("Std error of the mean = std dev / square root of the number of cases. It treats the cases as "
+                                        "independent; moment matching makes them slightly dependent, so it is approximate.")
     schedule = lambda letter: f"SUM(Inputs!${letter}${SCHEDULE_FIRST_ROW}:${letter}${SCHEDULE_FIRST_ROW + N_PERIODS - 1})"  # noqa: E731
     promised = [f"={schedule('C')}", f"={schedule('D')}", f"={schedule('E')}",
                 f"=B{SUMMARY_FIRST_ROW}-B{SUMMARY_FIRST_ROW + 1}-B{SUMMARY_FIRST_ROW + 2}"]
@@ -365,14 +427,14 @@ def build_statistics(wb: Workbook) -> None:
         r, data = SUMMARY_FIRST_ROW + k, f"CashFlows!{column_range(CF_TOTAL_COL + k)}"
         ws[f"A{r}"] = label
         ws[f"B{r}"] = promised[k]
-        formulas = [f"=AVERAGE({data})", f"=STDEV({data})", f"=MIN({data})", f"=PERCENTILE({data},0.05)",
-                    f"=MEDIAN({data})", f"=PERCENTILE({data},0.95)", f"=MAX({data})", f"=IF(B{r}=0,0,C{r}/B{r})",
-                    f'=COUNTIF({data},"<"&(B{r}-0.000000001))/{N_CASES}']
+        formulas = [f"=AVERAGE({data})", f"=STDEV({data})", f"=D{r}/SQRT(Number_of_Cases)", f"=MIN({data})",
+                    f"=PERCENTILE({data},0.05)", f"=MEDIAN({data})", f"=PERCENTILE({data},0.95)", f"=MAX({data})",
+                    f"=IF(B{r}=0,0,C{r}/B{r})", f'=COUNTIF({data},"<"&(B{r}-0.000000001))/Number_of_Cases']
         for offset, formula in enumerate(formulas):
             ws.cell(row=r, column=3 + offset, value=formula)
-        for c in range(2, 10):
+        for c in range(2, 11):
             ws.cell(row=r, column=c).number_format = "0.000"
-        ws[f"J{r}"].number_format = ws[f"K{r}"].number_format = "0.0%"
+        ws[f"K{r}"].number_format = ws[f"L{r}"].number_format = "0.0%"
 
     counts = f"Defaults!{column_range(DEF_COUNT_COL)}"
     ws[f"A{DIST_FIRST_ROW - 2}"] = "Number of bonds defaulting within 5 years"
@@ -383,7 +445,7 @@ def build_statistics(wb: Workbook) -> None:
         r = DIST_FIRST_ROW + k
         ws[f"A{r}"] = k
         ws[f"B{r}"] = f"=COUNTIF({counts},A{r})"
-        ws[f"C{r}"] = f"=B{r}/{N_CASES}"
+        ws[f"C{r}"] = f"=B{r}/Number_of_Cases"
         ws[f"D{r}"] = f"=BINOMDIST(A{r},{N_BONDS},1-(1-pd_annual)^{BASE_DEAL['years']},FALSE)"
         ws[f"E{r}"] = f'=IF(B{r}=0,"",AVERAGEIF({counts},A{r},CashFlows!{column_range(CF_TOTAL_COL)}))'
         ws[f"F{r}"] = f'=IF(B{r}=0,"",AVERAGEIF({counts},A{r},CashFlows!{column_range(CF_TOTAL_COL + 3)}))'
@@ -408,7 +470,7 @@ def build_statistics(wb: Workbook) -> None:
 
     build_histogram(ws)
     add_statistics_charts(ws)
-    widths(ws, {"A": 18, **{col(c): 14 for c in range(2, 12)}})
+    widths(ws, {"A": 18, **{col(c): 14 for c in range(2, 13)}})
 
 
 def build_histogram(ws) -> None:
@@ -463,10 +525,10 @@ def build_sensitivity(wb: Workbook, results: dict) -> None:
     formats = ["0.000", "0.0%", "0.000", "0.000", "0.000", "0.000", "0.0%", "0.0%"]
     header(ws, LIVE_ROW - 1, ["", "Value"] + columns, height=32)
     counts, equity_row = f"Defaults!{column_range(DEF_COUNT_COL)}", SUMMARY_FIRST_ROW + 3
-    live = [f"=AVERAGE({counts})", f"=COUNTIF({counts},0)/{N_CASES}", f"=Statistics!C{equity_row}",
-            f"=Statistics!D{equity_row}", f"=Statistics!F{equity_row}", f"=Statistics!E{equity_row}",
-            f"=SUM(CashFlows!{column_range(CF_TOTAL_COL + 4)})/{N_CASES}",
-            f"=SUM(CashFlows!{column_range(CF_TOTAL_COL + 5)})/{N_CASES}"]
+    live = [f"=AVERAGE({counts})", f"=COUNTIF({counts},0)/Number_of_Cases", f"=Statistics!C{equity_row}",
+            f"=Statistics!D{equity_row}", f"=Statistics!G{equity_row}", f"=Statistics!F{equity_row}",
+            f"=SUM(CashFlows!{column_range(CF_TOTAL_COL + 4)})/Number_of_Cases",
+            f"=SUM(CashFlows!{column_range(CF_TOTAL_COL + 5)})/Number_of_Cases"]
     ws[f"A{LIVE_ROW}"] = "This workbook now"
     ws[f"A{LIVE_ROW}"].font = BOLD
     for offset, (formula, fmt) in enumerate(zip(live, formats)):

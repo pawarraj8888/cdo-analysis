@@ -101,7 +101,9 @@ def assumptions(results: dict) -> list:
         ("Random Numbers",
          f"{results['n_cases']} cases x {d['n_bonds']} bonds of standard normals, generated once (seed {results['seed']}) "
          f"and stored in fixed_random_numbers.csv. Cases are numbered 1 to {results['n_cases']} and every run uses the "
-         "same numbers."),
+         "same numbers. Before use they are de-meaned and moment matched as shown in class, so that across the "
+         f"{results['n_cases']} cases each bond's numbers have mean 0 and variance 1 and are uncorrelated with the "
+         "other bonds' numbers."),
         ("Classes",
          f"Class A: ${d['a_notional']:.0f} MM, {pct(d['a_coupon'], 0)} coupon. Class B: ${d['b_notional']:.0f} MM, "
          f"{pct(d['b_coupon'], 0)} coupon. We treat both as bullet bonds with quarterly coupons and principal at year "
@@ -121,6 +123,7 @@ def steps(results: dict) -> list:
     """(heading, text) pairs for the Implementation Steps block."""
     c, d = results["checks"], results["deal"]
     recovered = 1.0 - d["lgd"]
+    drawn = results["moment_matching"]["raw"]
     return [
         ("BIS Bond Function",
          "Given the period a bond defaults in, the function returns the promised cash flows before it and "
@@ -129,10 +132,18 @@ def steps(results: dict) -> list:
         ("Fixed Random Numbers",
          f"Read the {results['n_cases']} x {d['n_bonds']} table of independent normals from the csv file (it is "
          "created from the seed if it is missing)."),
+        ("Moment Matching",
+         "Subtract each column's mean, compute the covariance matrix of the draws and its Cholesky factor, and "
+         "multiply the de-meaned draws by the inverse of that factor. As drawn, the column means were up to "
+         f"{drawn['max_abs_mean']:.3f} away from 0, the variances ran from {drawn['min_variance']:.2f} to "
+         f"{drawn['max_variance']:.2f} and two bonds' numbers were correlated by up to "
+         f"{drawn['max_abs_correlation']:.2f}. After matching the means are 0, the variances are 1 and the "
+         "correlations are 0."),
         ("Correlated Defaults",
-         "Multiply by the Cholesky factor, convert to uniforms, then to default times and default quarters. The "
-         f"average pairwise correlation comes out at {c['corr_normals']:.3f} for the simulated normals and "
-         f"{c['corr_default_times']:.3f} for the default times."),
+         "Multiply the matched numbers by the Cholesky factor of the correlation matrix, convert to uniforms, then "
+         "to default times and default quarters. Because of the moment matching the correlated normals have a "
+         f"pairwise correlation of exactly {c['corr_normals']:.2f} across the cases. For the default times it comes "
+         f"out at {c['corr_default_times']:.3f}."),
         ("Collateral Cash Flows",
          f"Apply the BIS function to every case and bond ({results['n_cases']} x {d['n_bonds']} x {results['n_periods']} "
          "array) and add up the bonds to get the pool."),
@@ -165,7 +176,8 @@ def results_summary(results: dict) -> str:
         f"Across the {results['n_cases']} cases an average of {c['avg_defaults_simulated']:.2f} of the "
         f"{results['n_bonds']} bonds default within 5 years (theory {c['avg_defaults_theory']:.2f}), and "
         f"{pct(zero_default_share)} of cases have no default at all. The pool collects ${mm(pool['mean'], 1)} MM on "
-        f"average out of the ${pool['promised']:.0f} MM promised ({pct(pool['mean / promised'])}), with a standard "
+        f"average out of the ${pool['no-default amount']:.0f} MM promised ({pct(pool['mean / no-default amount'])}; "
+        f"the standard error of that mean is ${mm(pool['std error'], 1)} MM), with a standard "
         f"deviation of ${mm(pool['std dev'], 1)} MM, a 5th percentile of ${mm(pool['5th pct'], 1)} MM and a worst case "
         f"of ${mm(pool['min'], 1)} MM (case {c['worst_case']}, {c['worst_case_defaults']} defaults). "
         "Class A and Class B are paid in full in every case. This is not luck in the sample: with a "
@@ -174,7 +186,7 @@ def results_summary(results: dict) -> str:
         f"at maturity, and the two classes together need only ${c['classes_need_per_quarter']:.2f} MM and "
         f"${c['classes_need_at_maturity']:.2f} MM. Under the BIS model with these inputs both classes are effectively "
         "free of default risk, so all of the variability in the collateral passes to the bank's equity. Equity "
-        f"receives ${mm(equity['mean'], 1)} MM on average against ${equity['promised']:.0f} MM if nothing defaults, "
+        f"receives ${mm(equity['mean'], 1)} MM on average against ${equity['no-default amount']:.0f} MM if nothing defaults, "
         f"with the same standard deviation as the pool (${mm(equity['std dev'], 1)} MM), a 5th percentile of "
         f"${mm(equity['5th pct'], 1)} MM and a minimum of ${mm(equity['min'], 1)} MM. Correlation matters for the "
         f"tails: {pct(c['p_four_or_more_simulated'])} of cases have 4 or more defaults "
@@ -244,20 +256,26 @@ def front_matter(results: dict) -> list:
 
 def results_pages(results: dict, figures: Path) -> list:
     names = {"pool": "Collateral pool", "class_a": "Class A", "class_b": "Class B", "equity": "Equity (bank)"}
-    rows = [["", "Promised", "Mean", "Std dev", "5th pct", "Median", "Worst case", "Mean / promised"]]
+    rows = [["", "No-default\namount", "Mean", "Std error\nof the mean", "Std dev", "5th pct", "Median", "Worst case",
+             "Mean / no-\ndefault amount"]]
     for r in results["summary"]:
-        rows.append([names[r["series"]], mm(r["promised"]), mm(r["mean"]), mm(r["std dev"]), mm(r["5th pct"]),
-                     mm(r["median"]), mm(r["min"]), pct(r["mean / promised"])])
+        rows.append([names[r["series"]], mm(r["no-default amount"]), mm(r["mean"]), mm(r["std error"]), mm(r["std dev"]),
+                     mm(r["5th pct"]), mm(r["median"]), mm(r["min"]), pct(r["mean / no-default amount"])])
     story = [
-        table(rows, [1.3 * inch] + [0.78 * inch] * 6 + [1.0 * inch]),
+        table(rows, [1.2 * inch, 0.8 * inch, 0.65 * inch, 0.8 * inch, 0.65 * inch, 0.65 * inch, 0.65 * inch,
+                     0.72 * inch, 0.88 * inch]),
         Paragraph("Table 1. Total cash received over the 5 years by the collateral pool and by each class, $ MM, "
-                  f"undiscounted, across the {results['n_cases']} cases.", CAPTION),
-        figure(figures / "total_cash_distributions.png", 5.6 * inch),
+                  f"undiscounted, across the {results['n_cases']} cases. The no-default amount is what each would "
+                  "receive if no bond defaulted. The standard error is the standard deviation divided by the square "
+                  "root of the number of cases; it treats the cases as independent, which is only approximately true "
+                  "after moment matching.", CAPTION),
+        figure(figures / "total_cash_distributions.png", 6.4 * inch),
         Paragraph("Figure 1. Distribution of total 5-year cash from the collateral pool (left) and to the bank's "
                   "equity (right). The equity distribution is the pool distribution shifted down by the "
                   f"${results['promised']['totals']['class_a'] + results['promised']['totals']['class_b']:.0f} MM paid "
                   "to Classes A and B.", CAPTION),
     ]
+    story.append(PageBreak())
     rows = [["Defaults in 5 years", "Cases", "Simulated", "Exact (model)", "If independent", "Avg pool cash",
              "Avg equity cash"]]
     for r in results["default_distribution"]:
@@ -274,13 +292,12 @@ def results_pages(results: dict, figures: Path) -> list:
                   "probability under the model (common factor, no random numbers) and the binomial if defaults were "
                   "independent, with the average cash ($ MM) in cases with that many defaults. Each default costs the "
                   f"pool about ${per_default:.0f} MM.", CAPTION),
-        PageBreak(),
-        figure(figures / "default_count.png", 5.4 * inch),
+        figure(figures / "default_count.png", 5.0 * inch),
         Paragraph(f"Figure 2. Distribution of the number of defaults. With correlation {results['deal']['rho']:.2f} "
                   "both ends are more likely than under independence: more cases with no defaults and more cases with "
                   "5 or more. The dots are the exact probabilities under the model, which the 1000 cases track closely.",
                   CAPTION),
-        figure(figures / "quarterly_cash_flows.png", 5.4 * inch),
+        figure(figures / "quarterly_cash_flows.png", 5.0 * inch),
     ]
     q = results["quarterly"]
     story.append(Paragraph(
@@ -402,8 +419,8 @@ def client_points(results: dict, safe_b: float) -> list:
         f"least {pct(1 - c['safe_lgd']['class_b'], 0)} of promised payments (LGD of {pct(c['safe_lgd']['class_b'], 0)} "
         "or less), they are paid in full whatever the default experience.",
         "The bank's retained equity carries all of the default risk. Its expected cash is about "
-        f"{pct(equity['mean / promised'], 0)} of the no-default amount, and in 1 case out of 20 it receives "
-        f"${mm(equity['5th pct'], 0)} MM or less out of ${equity['promised']:.0f} MM.",
+        f"{pct(equity['mean / no-default amount'], 0)} of the no-default amount, and in 1 case out of 20 it receives "
+        f"${mm(equity['5th pct'], 0)} MM or less out of ${equity['no-default amount']:.0f} MM.",
         "Over the ranges we tested, the default probability moves the equity result the most. Correlation leaves the "
         f"average alone but lowers the 5th percentile from ${mm(by_rho[0.0]['equity 5th pct'], 0)} MM to "
         f"${mm(by_rho[0.8]['equity 5th pct'], 0)} MM between 0 and 0.8. The LGD assumption is the one to watch for "

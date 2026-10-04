@@ -61,19 +61,59 @@
     return (lo + hi) / 2;
   }
 
-  // Lower Cholesky factor of the n x n matrix with 1 on the diagonal and rho elsewhere.
-  function cholesky(n, rho) {
-    var L = [];
+  // Lower Cholesky factor L of a symmetric positive definite matrix (matrix = L L').
+  function choleskyOf(matrix) {
+    var n = matrix.length, L = [];
     for (var i = 0; i < n; i++) {
       L.push(new Array(n).fill(0));
       for (var j = 0; j <= i; j++) {
         var s = 0;
         for (var k = 0; k < j; k++) { s += L[i][k] * L[j][k]; }
-        var target = i === j ? 1 : rho;
-        L[i][j] = i === j ? Math.sqrt(target - s) : (target - s) / L[j][j];
+        L[i][j] = i === j ? Math.sqrt(matrix[i][i] - s) : (matrix[i][j] - s) / L[j][j];
       }
     }
     return L;
+  }
+
+  // Lower Cholesky factor of the n x n matrix with 1 on the diagonal and rho elsewhere.
+  function cholesky(n, rho) {
+    var matrix = [];
+    for (var i = 0; i < n; i++) {
+      matrix.push(new Array(n).fill(rho));
+      matrix[i][i] = 1;
+    }
+    return choleskyOf(matrix);
+  }
+
+  // Moment matching as shown in class: de-mean the draws, then multiply them by the inverse of the Cholesky
+  // factor of their covariance. The result has column means of 0 and an identity covariance matrix.
+  function momentMatch(Z) {
+    var n = Z.length, m = Z[0].length, c, i, j, k;
+    if (n <= m) { throw new Error("moment matching needs more cases than bonds"); }
+    var mean = new Array(m).fill(0);
+    for (c = 0; c < n; c++) { for (j = 0; j < m; j++) { mean[j] += Z[c][j]; } }
+    for (j = 0; j < m; j++) { mean[j] /= n; }
+    var D = Z.map(function (row) { return row.map(function (v, col) { return v - mean[col]; }); });
+    var cov = [];
+    for (i = 0; i < m; i++) {
+      cov.push(new Array(m).fill(0));
+      for (j = 0; j <= i; j++) {
+        var s = 0;
+        for (c = 0; c < n; c++) { s += D[c][i] * D[c][j]; }
+        cov[i][j] = s / n;
+        cov[j][i] = cov[i][j];
+      }
+    }
+    var L = choleskyOf(cov);
+    return D.map(function (d) {            // each case: solve L y = d
+      var y = new Array(m);
+      for (i = 0; i < m; i++) {
+        var t = d[i];
+        for (k = 0; k < i; k++) { t -= L[i][k] * y[k]; }
+        y[i] = t / L[i][i];
+      }
+      return y;
+    });
   }
 
   // Coupon every period and the face value with the last coupon.
@@ -163,7 +203,7 @@
   function totals(rows) { return rows.map(sum); }
 
   function describe(values, promised) {
-    return { promised: promised, mean: mean(values), std: std(values), min: Math.min.apply(null, values),
+    return { promised: promised, mean: mean(values), std: std(values), se: std(values) / Math.sqrt(values.length), min: Math.min.apply(null, values),
              p5: percentile(values, 5), median: percentile(values, 50), p95: percentile(values, 95),
              max: Math.max.apply(null, values), meanOverPromised: promised ? mean(values) / promised : NaN };
   }
@@ -227,7 +267,7 @@
   }
 
   return {
-    normCdf: normCdf, normInv: normInv, cholesky: cholesky, promisedCashFlows: promisedCashFlows,
+    normCdf: normCdf, normInv: normInv, cholesky: cholesky, choleskyOf: choleskyOf, momentMatch: momentMatch, promisedCashFlows: promisedCashFlows,
     validateDeal: validateDeal, caseDefaults: caseDefaults, simulate: simulate, sum: sum, mean: mean, std: std,
     percentile: percentile, totals: totals, describe: describe, shortfalls: shortfalls, summaryRow: summaryRow,
     binomialPmf: binomialPmf, exactDefaultCountDistribution: exactDefaultCountDistribution,

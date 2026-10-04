@@ -44,7 +44,7 @@ from cdo.analysis import (  # noqa: E402
 from cdo.bonds import bis_cash_flows, bis_expected_value, promised_cash_flows  # noqa: E402
 from cdo.defaults import correlate, correlation_matrix, default_period, default_times  # noqa: E402
 from cdo.model import simulate, validate_deal  # noqa: E402
-from cdo.random_numbers import load_fixed_normals  # noqa: E402
+from cdo.random_numbers import load_fixed_normals, moment_match  # noqa: E402
 from cdo.report import (  # noqa: E402
     COLORS,
     apply_chart_style,
@@ -186,17 +186,49 @@ candidates = [Path("fixed_random_numbers.csv"), Path("../data/fixed_random_numbe
 random_file = next((f for f in candidates if f.exists()), candidates[0])
 
 z_table, source = load_fixed_normals(random_file, N_CASES, N_BONDS, SEED)
-Z = z_table.values
+Z_raw = z_table.values
 bond_names = list(z_table.columns)
-print(f"Independent normals: {Z.shape[0]} cases x {Z.shape[1]} bonds ({source})")
+print(f"Independent normals: {Z_raw.shape[0]} cases x {Z_raw.shape[1]} bonds ({source})")
 z_table.head()
+"""),
+        md("""
+### Moment matching
+
+1000 draws never have exactly the moments they are supposed to have. Each bond's numbers have a mean
+a little away from 0 and a variance a little away from 1, and two bonds' numbers are slightly
+correlated just by chance. As shown in class, we take this out before the numbers are used:
+
+1. subtract each column's mean (de-mean),
+2. compute the covariance matrix of the draws and its Cholesky factor L,
+3. multiply the de-meaned draws by the inverse of L.
+
+The result `Z` has column means of exactly 0, variances of exactly 1 and no correlation between
+columns, and it is what the model uses from here on. The numbers are still fixed: the same file
+always gives the same `Z`.
+"""),
+        code(source_of(moment_match), """
+Z = moment_match(Z_raw)
+
+
+def largest_correlation(A):
+    corr = np.corrcoef(A, rowvar=False)
+    return np.abs(corr[~np.eye(A.shape[1], dtype=bool)]).max()
+
+
+check_moments = pd.DataFrame({
+    "largest |column mean|": [np.abs(Z_raw.mean(axis=0)).max(), np.abs(Z.mean(axis=0)).max()],
+    "smallest variance": [Z_raw.var(axis=0).min(), Z.var(axis=0).min()],
+    "largest variance": [Z_raw.var(axis=0).max(), Z.var(axis=0).max()],
+    "largest |correlation| between two bonds": [largest_correlation(Z_raw), largest_correlation(Z)],
+}, index=["as drawn", "moment matched"])
+check_moments.round(4).abs()
 """),
         md("""
 ## 4. Correlated default times
 
 Steps for every case:
 
-1. Correlate the 10 independent normals with the Cholesky factor of the 10 x 10 correlation
+1. Correlate the 10 moment-matched normals with the Cholesky factor of the 10 x 10 correlation
    matrix (1 on the diagonal, 0.20 everywhere else).
 2. Convert each correlated normal to a uniform with the normal CDF, u = N(x).
 3. Convert the uniform to a default time in years with the formula from class,
@@ -204,8 +236,9 @@ Steps for every case:
 4. The bond defaults in quarter ceil(4t). If that is past quarter 20 the bond survives to maturity
    (stored as quarter 21).
 
-The correlation is applied to the normals (a Gaussian copula), so the correlation of the default
-times themselves comes out a little below 0.20. Each bond on its own still has the geometric
+The correlation is applied to the normals (a Gaussian copula). Because the numbers were moment
+matched, the correlated normals have a correlation of exactly 0.20 across the 1000 cases. The
+correlation of the default times themselves comes out a little below 0.20. Each bond on its own still has the geometric
 default time with pi = 4% per year, so P(default by quarter k) = 1 - 0.96^(k/4).
 """),
         code(source_of(correlation_matrix, correlate, default_times, default_period, average_pairwise_correlation), """
@@ -314,7 +347,8 @@ CASE = {EXAMPLE_CASE}
 assert 1 <= CASE <= N_CASES, "CASE must be between 1 and 1000"
 i = CASE - 1
 case_bonds = pd.DataFrame({
-    "random normal (independent)": Z[i],
+    "random normal (as drawn)": Z_raw[i],
+    "moment matched": Z[i],
     "correlated normal": X[i],
     "uniform u": norm.cdf(X[i]),
     "default time (years)": T[i],
@@ -344,6 +378,10 @@ plt.show()
 ## 8. Statistical analysis (Task 3)
 
 Totals are the sum of the 20 quarterly cash flows, not discounted (discounting is Part 2).
+
+The "no-default amount" is what the pool or the class would receive if no bond defaulted. The
+standard error is the standard deviation divided by the square root of the number of cases. It
+treats the 1000 cases as independent, which is only approximately true after moment matching.
 """),
         code(source_of(describe), """
 pool_total = pool_cf.sum(axis=1)
@@ -446,13 +484,14 @@ sens_b[["equity mean", "equity 5th pct", "equity min", "P(A shortfall)", "P(B sh
 """),
         code("""
 summary = pd.DataFrame({
-    "Promised ($MM)": stats["promised"],
+    "No-default amount ($MM)": stats["no-default amount"],
     "Mean ($MM)": stats["mean"],
+    "Std error ($MM)": stats["std error"],
     "Std dev ($MM)": stats["std dev"],
     "5th pct ($MM)": stats["5th pct"],
     "Worst case ($MM)": stats["min"],
-    "Mean / promised": stats["mean / promised"],
-    "P(below promised)": [(pool_total < pool_promised.sum() - 1e-9).mean(), (a_short > 1e-9).mean(),
+    "Mean / no-default amount": stats["mean / no-default amount"],
+    "P(below no-default amount)": [(pool_total < pool_promised.sum() - 1e-9).mean(), (a_short > 1e-9).mean(),
                           (b_short > 1e-9).mean(), (eq_total < eq_promised - 1e-9).mean()],
 })
 summary.round(3)
